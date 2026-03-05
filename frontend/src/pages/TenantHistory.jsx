@@ -1,8 +1,10 @@
 import { useEffect } from "react";
 import { useRent } from "../context/RentContext.jsx";
+import { useTranslation } from "../context/TranslationContext.jsx";
 
 const TenantHistory = () => {
   const { history, loadHistory, formatCurrency, error } = useRent();
+  const { t } = useTranslation();
 
   useEffect(() => {
     loadHistory();
@@ -21,7 +23,7 @@ const TenantHistory = () => {
         <table className="w-full border-collapse text-left text-sm">
           <thead className="bg-ink text-white">
             <tr>
-              <th className="px-5 py-3">Tenant</th>
+              <th className="px-5 py-3">{t("tenantName")}</th>
               <th className="px-5 py-3">Phone</th>
               <th className="px-5 py-3">Agreed Rent</th>
               <th className="px-5 py-3">Lease Start</th>

@@ -1,0 +1,9 @@
+{
+  "name": "Punnam Rent Manager",
+  "short_name": "Rent Manager",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f2ff",
+  "theme_color": "#2d1556",
+  "description": "Rent management app for tracking flats, tenants, and payments."
+}

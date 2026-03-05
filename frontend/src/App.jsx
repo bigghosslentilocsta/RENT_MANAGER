@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { RentProvider, useRent } from "./context/RentContext.jsx";
+import { useTranslation } from "./context/TranslationContext.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import RentHistory from "./pages/RentHistory.jsx";
 import TenantHistory from "./pages/TenantHistory.jsx";
+import LoginPage from "./components/LoginPage.jsx";
 
 const HeaderContent = ({ view, setView }) => {
+  const { language, toggleLanguage, t } = useTranslation();
+
   return (
     <header className="px-6 py-6 md:px-12">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -34,7 +38,7 @@ const HeaderContent = ({ view, setView }) => {
                   : "bg-white/80 text-ink border border-white/60"
               }`}
             >
-              Rent History
+              Rent {t("history")}
             </button>
             <button
               type="button"
@@ -45,7 +49,14 @@ const HeaderContent = ({ view, setView }) => {
                   : "bg-white/80 text-ink border border-white/60"
               }`}
             >
-              Tenant History
+              Tenant {t("history")}
+            </button>
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              className="rounded-full border border-white/60 bg-white/80 px-5 py-2 text-sm font-semibold text-ink"
+            >
+              Translate ({language === "en" ? "తెలుగు" : "English"})
             </button>
           </nav>
         </div>
@@ -56,6 +67,11 @@ const HeaderContent = ({ view, setView }) => {
 
 const App = () => {
   const [view, setView] = useState("dashboard");
+  const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem("isLoggedIn") === "true");
+
+  if (!isLoggedIn) {
+    return <LoginPage onLoginSuccess={() => setIsLoggedIn(true)} />;
+  }
 
   return (
     <RentProvider>

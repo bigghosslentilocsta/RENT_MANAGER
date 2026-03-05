@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { useRent } from "../context/RentContext.jsx";
+import { useTranslation } from "../context/TranslationContext.jsx";
 
 const RentHistory = () => {
   const { rentHistory, loadRentHistory, updatePaymentDate, formatCurrency, error, loading } = useRent();
+  const { t } = useTranslation();
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
   const [editingPaymentId, setEditingPaymentId] = useState("");
@@ -152,8 +154,8 @@ const RentHistory = () => {
         <table className="w-full border-collapse text-left text-sm">
           <thead className="bg-ink text-white">
             <tr>
-              <th className="px-5 py-3">Flat</th>
-              <th className="px-5 py-3">Tenant</th>
+              <th className="px-5 py-3">{t("flatNumber")}</th>
+              <th className="px-5 py-3">{t("tenantName")}</th>
               <th className="px-5 py-3">Phone</th>
               <th className="px-5 py-3">Amount</th>
               <th className="px-5 py-3">Status</th>
@@ -176,7 +178,7 @@ const RentHistory = () => {
             ) : (
               rentHistory.map((record) => (
                 <tr key={record._id} className="border-t border-ink/10">
-                  <td className="px-5 py-3 font-semibold">Flat {record.flatNumber}</td>
+                  <td className="px-5 py-3 font-semibold">{t("flatNumber")}: {record.flatNumber}</td>
                   <td className="px-5 py-3">{record.tenantName}</td>
                   <td className="px-5 py-3 text-muted">{record.tenantPhone}</td>
                   <td className="px-5 py-3 font-semibold">{formatCurrency(record.amount)}</td>
@@ -188,7 +190,7 @@ const RentHistory = () => {
                           : "border border-pending bg-pending/10 text-pending"
                       }`}
                     >
-                      {record.status}
+                      {record.status === "Paid" ? t("rentPaid") : t("pending")}
                     </span>
                   </td>
                   <td className="px-5 py-3 text-muted">
