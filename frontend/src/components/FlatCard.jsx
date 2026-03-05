@@ -1,6 +1,8 @@
 import { CheckCircle2, DoorOpen, UserMinus2 } from "lucide-react";
+import { useState } from "react";
 import { useRent } from "../context/RentContext.jsx";
 import { useTranslation } from "../context/TranslationContext.jsx";
+import ConfirmationDialog from "./ConfirmationDialog.jsx";
 
 const statusStyles = {
   Paid: "border-paid bg-paid/10 text-paid",
@@ -38,6 +40,8 @@ const normalizePhoneNumber = (rawPhone = "") => {
 const FlatCard = ({ flat, onAddTenant, onViewHistory }) => {
   const { formatCurrency, togglePayment, vacate, loading } = useRent();
   const { t } = useTranslation();
+  const [dialogOpen, setDialogOpen] = useState(null);
+  const [dialogLoading, setDialogLoading] = useState(false);
   const tenant = flat.currentTenant;
   const dueDate = tenant ? getDueDate(tenant.leaseStart) : null;
 
@@ -55,6 +59,36 @@ const FlatCard = ({ flat, onAddTenant, onViewHistory }) => {
     const whatsappUrl = `https://wa.me/${normalizedPhone}?text=${encodedMessage}`;
 
     window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const handleTogglePaymentClick = (event) => {
+    event.stopPropagation();
+    setDialogOpen("togglePayment");
+  };
+
+  const handleTogglePaymentConfirm = async () => {
+    setDialogLoading(true);
+    try {
+      await togglePayment(flat.paymentId);
+    } finally {
+      setDialogLoading(false);
+      setDialogOpen(null);
+    }
+  };
+
+  const handleVacateClick = (event) => {
+    event.stopPropagation();
+    setDialogOpen("vacate");
+  };
+
+  const handleVacateConfirm = async () => {
+    setDialogLoading(true);
+    try {
+      await vacate(tenant._id);
+    } finally {
+      setDialogLoading(false);
+      setDialogOpen(null);
+    }
   };
 
   if (!tenant) {
@@ -78,7 +112,8 @@ const FlatCard = ({ flat, onAddTenant, onViewHistory }) => {
   }
 
   return (
-    <article
+    <>
+      <article
       role="button"
       tabIndex={0}
       onClick={() => onViewHistory?.(tenant)}
@@ -124,14 +159,7 @@ const FlatCard = ({ flat, onAddTenant, onViewHistory }) => {
         </button>
         <button
           type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            const shouldToggle = window.confirm(
-              `Change payment status for ${tenant.name} in Flat ${flat.number}?`
-            );
-            if (!shouldToggle) return;
-            togglePayment(flat.paymentId);
-          }}
+          onClick={handleTogglePaymentClick}
           disabled={loading || !flat.paymentId}
           className={`rounded-full px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold ${
             flat.paymentStatus === "Paid" ? "bg-paid/10 text-paid" : "bg-pending/10 text-pending"
@@ -141,14 +169,7 @@ const FlatCard = ({ flat, onAddTenant, onViewHistory }) => {
         </button>
         <button
           type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            const shouldVacate = window.confirm(
-              `Vacate ${tenant.name} from Flat ${flat.number}? This action cannot be undone.`
-            );
-            if (!shouldVacate) return;
-            vacate(tenant._id);
-          }}
+          onClick={handleVacateClick}
           disabled={loading}
           className="inline-flex items-center justify-center gap-2 rounded-full border border-ink/20 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-ink"
         >
@@ -157,6 +178,30 @@ const FlatCard = ({ flat, onAddTenant, onViewHistory }) => {
         </button>
       </div>
     </article>
+
+    {/* Confirmation Dialogs */}
+    <ConfirmationDialog
+      open={dialogOpen === "togglePayment"}
+      title="Change Payment Status"
+      message={`Update rent payment status for ${tenant.name} in Flat ${flat.number}?`}
+      confirmText={flat.paymentStatus === "Paid" ? "Mark as Pending" : "Mark as Paid"}
+      isDangerous={false}
+      isLoading={dialogLoading}
+      onConfirm={handleTogglePaymentConfirm}
+      onCancel={() => setDialogOpen(null)}
+    />
+
+    <ConfirmationDialog
+      open={dialogOpen === "vacate"}
+      title="Vacate Tenant"
+      message={`Are you sure you want to vacate ${tenant.name} from Flat ${flat.number}? This action cannot be undone.`}
+      confirmText="Vacate"
+      isDangerous={true}
+      isLoading={dialogLoading}
+      onConfirm={handleVacateConfirm}
+      onCancel={() => setDialogOpen(null)}
+    />
+    </>
   );
 };
 
