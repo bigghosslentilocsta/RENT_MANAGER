@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { useRent } from "../context/RentContext.jsx";
 
 const AddTenantModal = ({ open, flats, onClose }) => {
-  const { moveIn, loading } = useRent();
+  const { moveIn, loading, error } = useRent();
   const vacantFlats = useMemo(() => flats.filter((flat) => !flat.currentTenant), [flats]);
   const [form, setForm] = useState({
     flatNumber: "",
@@ -140,6 +140,11 @@ const AddTenantModal = ({ open, flats, onClose }) => {
               className="mt-2 w-full rounded-xl sm:rounded-2xl border border-ink/10 px-3 sm:px-4 py-2 text-sm"
             />
           </label>
+          {error && (
+            <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-800">
+              {error}
+            </div>
+          )}
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 pt-2">
             <button
               type="button"
