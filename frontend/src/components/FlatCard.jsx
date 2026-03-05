@@ -93,16 +93,16 @@ const FlatCard = ({ flat, onAddTenant, onViewHistory }) => {
 
   if (!tenant) {
     return (
-      <article className="flex h-full flex-col justify-between rounded-3xl border border-white/50 bg-white/75 p-6 shadow-card backdrop-blur-xl">
+      <article className="flex h-full flex-col justify-between rounded-2xl sm:rounded-3xl border border-white/50 bg-white/75 p-4 sm:p-6 shadow-card backdrop-blur-xl">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-muted">Flat {flat.number}</p>
-          <h3 className="mt-3 text-xl font-semibold">{t("vacant")}</h3>
-          <p className="mt-2 text-sm text-muted">Ready for move-in.</p>
+          <p className="text-xs uppercase tracking-[0.2em] sm:tracking-[0.3em] text-muted">Flat {flat.number}</p>
+          <h3 className="mt-2 sm:mt-3 text-base sm:text-xl font-semibold">{t("vacant")}</h3>
+          <p className="mt-2 text-xs sm:text-sm text-muted">Ready for move-in.</p>
         </div>
         <button
           type="button"
           onClick={() => onAddTenant(flat)}
-          className="mt-6 inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white"
+          className="mt-4 sm:mt-6 inline-flex items-center gap-2 rounded-full bg-ink px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-white"
         >
           <DoorOpen size={16} />
           Add Tenant
@@ -123,14 +123,14 @@ const FlatCard = ({ flat, onAddTenant, onViewHistory }) => {
           onViewHistory?.(tenant);
         }
       }}
-      className="group flex h-full cursor-pointer flex-col justify-between rounded-3xl border border-white/50 bg-white/75 p-6 shadow-card backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(45,21,86,0.18)]"
+      className="group flex h-full cursor-pointer flex-col justify-between rounded-2xl sm:rounded-3xl border border-white/50 bg-white/75 p-4 sm:p-6 shadow-card backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(45,21,86,0.18)]"
     >
       <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-muted">Flat {flat.number}</p>
-        <h3 className="mt-3 text-xl font-semibold">{tenant.name}</h3>
-        <p className="mt-1 text-sm text-muted">Rent: {formatCurrency(flat.paymentAmount)}</p>
+        <p className="text-xs uppercase tracking-[0.2em] sm:tracking-[0.3em] text-muted">Flat {flat.number}</p>
+        <h3 className="mt-2 sm:mt-3 text-base sm:text-xl font-semibold">{tenant.name}</h3>
+        <p className="mt-1 text-xs sm:text-sm text-muted">Rent: {formatCurrency(flat.paymentAmount)}</p>
         {dueDate && (
-          <p className="mt-1 text-sm text-muted">Due: <span className="font-semibold">Every {dueDate}th</span></p>
+          <p className="mt-1 text-xs sm:text-sm text-muted">Due: <span className="font-semibold">Every {dueDate}th</span></p>
         )}
         <div
           className={`mt-4 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${

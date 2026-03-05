@@ -25,12 +25,12 @@ const Dashboard = () => {
 
   return (
     <section>
-      <div className="flex flex-col items-start gap-3 pb-6 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col items-start gap-3 pb-6 sm:pb-6 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold">Current Month</h2>
-          <p className="text-sm text-muted">{month ? `Status for ${month}` : ""}</p>
+          <h2 className="text-xl sm:text-2xl font-semibold">Current Month</h2>
+          <p className="text-xs sm:text-sm text-muted">{month ? `Status for ${month}` : ""}</p>
         </div>
-        {error ? <p className="text-sm text-pending">{error}</p> : null}
+        {error ? <p className="text-xs sm:text-sm text-pending">{error}</p> : null}
       </div>
       <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {flats.map((flat) => (
