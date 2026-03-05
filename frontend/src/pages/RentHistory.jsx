@@ -86,12 +86,12 @@ const RentHistory = () => {
 
   return (
     <section>
-      <div className="flex flex-col items-start gap-3 pb-6 md:flex-row md:items-end md:justify-between">
+      <div className="flex flex-col gap-4 pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold">Rent History</h2>
-          <p className="text-sm text-muted">View and track rent payments by month.</p>
+          <h2 className="text-xl sm:text-2xl font-semibold">Rent History</h2>
+          <p className="text-xs sm:text-sm text-muted">View and track rent payments by month.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <div className="flex flex-col gap-1">
             <label htmlFor="month" className="text-xs font-semibold uppercase tracking-[0.1em] text-muted">
               Month
@@ -100,7 +100,7 @@ const RentHistory = () => {
               id="month"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm font-medium"
+              className="rounded-lg border border-ink/20 bg-white px-3 py-2 text-xs sm:text-sm font-medium"
             >
               {months.map((m) => (
                 <option key={m.value} value={m.value}>
@@ -117,7 +117,7 @@ const RentHistory = () => {
               id="year"
               value={selectedYear}
               onChange={(e) => setSelectedYear(e.target.value)}
-              className="rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm font-medium"
+              className="rounded-lg border border-ink/20 bg-white px-3 py-2 text-xs sm:text-sm font-medium"
             >
               {years.map((y) => (
                 <option key={y} value={y}>
@@ -132,25 +132,25 @@ const RentHistory = () => {
       {error ? <p className="mb-4 text-sm text-pending">{error}</p> : null}
 
       {/* Summary Cards */}
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-card backdrop-blur-xl">
+      <div className="mb-6 grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
+        <div className="rounded-2xl sm:rounded-3xl border border-white/60 bg-white/80 p-4 sm:p-6 shadow-card backdrop-blur-xl">
           <p className="text-xs uppercase tracking-[0.2em] text-muted">Total Due</p>
-          <p className="mt-2 text-2xl font-semibold">{formatCurrency(calculateTotalRent())}</p>
+          <p className="mt-2 text-xl sm:text-2xl font-semibold">{formatCurrency(calculateTotalRent())}</p>
         </div>
-        <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-card backdrop-blur-xl">
+        <div className="rounded-2xl sm:rounded-3xl border border-white/60 bg-white/80 p-4 sm:p-6 shadow-card backdrop-blur-xl">
           <p className="text-xs uppercase tracking-[0.2em] text-paid">Paid</p>
-          <p className="mt-2 text-2xl font-semibold text-paid">{formatCurrency(calculateTotalPaid())}</p>
+          <p className="mt-2 text-xl sm:text-2xl font-semibold text-paid">{formatCurrency(calculateTotalPaid())}</p>
         </div>
-        <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-card backdrop-blur-xl">
+        <div className="rounded-2xl sm:rounded-3xl border border-white/60 bg-white/80 p-4 sm:p-6 shadow-card backdrop-blur-xl">
           <p className="text-xs uppercase tracking-[0.2em] text-pending">Pending</p>
-          <p className="mt-2 text-2xl font-semibold text-pending">
+          <p className="mt-2 text-xl sm:text-2xl font-semibold text-pending">
             {formatCurrency(calculateTotalPending())}
           </p>
         </div>
       </div>
 
-      {/* Rent Records Table */}
-      <div className="overflow-hidden rounded-3xl border border-white/60 bg-white/80 shadow-card backdrop-blur-xl">
+      {/* Rent Records Table - Desktop */}
+      <div className="hidden md:block overflow-hidden rounded-3xl border border-white/60 bg-white/80 shadow-card backdrop-blur-xl">
         <table className="w-full border-collapse text-left text-sm">
           <thead className="bg-ink text-white">
             <tr>
@@ -242,6 +242,93 @@ const RentHistory = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Rent Records - Mobile Cards */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <div className="rounded-2xl border border-white/60 bg-white/80 p-6 text-center shadow-card">
+            <p className="text-sm text-muted">Loading...</p>
+          </div>
+        ) : rentHistory.length === 0 ? (
+          <div className="rounded-2xl border border-white/60 bg-white/80 p-6 text-center shadow-card">
+            <p className="text-sm text-muted">No rent records for this month.</p>
+          </div>
+        ) : (
+          rentHistory.map((record) => (
+            <div key={record._id} className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-card">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-muted">{t("flatNumber")}: {record.flatNumber}</p>
+                  <p className="mt-1 text-base font-semibold">{record.tenantName}</p>
+                  <p className="mt-0.5 text-xs text-muted">{record.tenantPhone}</p>
+                </div>
+                <span
+                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.15em] ${
+                    record.status === "Paid"
+                      ? "border border-paid bg-paid/10 text-paid"
+                      : "border border-pending bg-pending/10 text-pending"
+                  }`}
+                >
+                  {record.status === "Paid" ? t("rentPaid") : t("pending")}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-ink/10">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.1em] text-muted">Amount</p>
+                  <p className="mt-1 text-sm font-semibold">{formatCurrency(record.amount)}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.1em] text-muted">Paid Date</p>
+                  {record.status === "Paid" ? (
+                    editingPaymentId === record._id ? (
+                      <div className="flex flex-col gap-1.5 mt-1">
+                        <input
+                          type="date"
+                          value={editingPaidDate}
+                          onChange={(event) => setEditingPaidDate(event.target.value)}
+                          className="rounded-lg border border-ink/20 bg-white px-2 py-1 text-xs font-medium text-ink"
+                        />
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => savePaidDate(record._id)}
+                            disabled={loading || !editingPaidDate}
+                            className="rounded-full bg-ink px-2.5 py-1 text-xs font-semibold text-white"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditPaidDate}
+                            disabled={loading}
+                            className="rounded-full border border-ink/20 px-2.5 py-1 text-xs font-semibold text-ink"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-1 mt-1">
+                        <p className="text-sm">{record.paidDate ? new Date(record.paidDate).toLocaleDateString("en-GB") : "-"}</p>
+                        <button
+                          type="button"
+                          onClick={() => beginEditPaidDate(record)}
+                          disabled={loading}
+                          className="rounded-full border border-ink/20 px-2.5 py-1 text-xs font-semibold text-ink self-start"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    )
+                  ) : (
+                    <p className="mt-1 text-sm text-muted">-</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </section>
   );

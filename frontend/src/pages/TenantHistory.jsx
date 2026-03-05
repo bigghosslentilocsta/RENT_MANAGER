@@ -14,12 +14,14 @@ const TenantHistory = () => {
     <section>
       <div className="flex flex-col items-start gap-3 pb-6 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold">Past Tenants</h2>
-          <p className="text-sm text-muted">Stay duration based on lease start and vacating date.</p>
+          <h2 className="text-xl sm:text-2xl font-semibold">Past Tenants</h2>
+          <p className="text-xs sm:text-sm text-muted">Stay duration based on lease start and vacating date.</p>
         </div>
-        {error ? <p className="text-sm text-pending">{error}</p> : null}
+        {error ? <p className="text-xs sm:text-sm text-pending">{error}</p> : null}
       </div>
-      <div className="overflow-hidden rounded-3xl border border-white/60 bg-white/80 shadow-card backdrop-blur-xl">
+
+      {/* Desktop Table */}
+      <div className="hidden md:block overflow-hidden rounded-3xl border border-white/60 bg-white/80 shadow-card backdrop-blur-xl">
         <table className="w-full border-collapse text-left text-sm">
           <thead className="bg-ink text-white">
             <tr>
@@ -54,6 +56,44 @@ const TenantHistory = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Cards */}
+      <div className="md:hidden space-y-3">
+        {history.length === 0 ? (
+          <div className="rounded-2xl border border-white/60 bg-white/80 p-6 text-center shadow-card">
+            <p className="text-sm text-muted">No past tenants yet.</p>
+          </div>
+        ) : (
+          history.map((tenant) => (
+            <div key={tenant._id} className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-card">
+              <div className="mb-3">
+                <p className="text-base font-semibold">{tenant.name}</p>
+                <p className="mt-0.5 text-xs text-muted">{tenant.phone}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-ink/10">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.1em] text-muted">Agreed Rent</p>
+                  <p className="mt-1 text-sm font-semibold">{formatCurrency(tenant.agreedRent)}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.1em] text-muted">Days Stayed</p>
+                  <p className="mt-1 text-sm font-semibold">{tenant.stayDurationDays ?? "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.1em] text-muted">Lease Start</p>
+                  <p className="mt-1 text-xs">{new Date(tenant.leaseStart).toLocaleDateString('en-GB')}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.1em] text-muted">Vacated</p>
+                  <p className="mt-1 text-xs">
+                    {tenant.vacatingDate ? new Date(tenant.vacatingDate).toLocaleDateString('en-GB') : "-"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </section>
   );

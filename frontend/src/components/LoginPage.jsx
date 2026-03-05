@@ -20,39 +20,39 @@ const LoginPage = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6">
-      <div className="w-full max-w-md rounded-3xl border border-white/60 bg-white/90 p-8 shadow-card backdrop-blur-xl">
-        <h1 className="text-2xl font-semibold text-center">Login</h1>
-        <p className="mt-2 text-sm text-muted text-center">Sign in to continue to Rent Manager.</p>
+    <div className="min-h-screen flex items-center justify-center px-4 sm:px-6">
+      <div className="w-full max-w-md rounded-2xl sm:rounded-3xl border border-white/60 bg-white/90 p-6 sm:p-8 shadow-card backdrop-blur-xl">
+        <h1 className="text-xl sm:text-2xl font-semibold text-center">Login</h1>
+        <p className="mt-2 text-xs sm:text-sm text-muted text-center">Sign in to continue to Rent Manager.</p>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <label className="block text-sm font-semibold text-muted">
+        <form onSubmit={handleSubmit} className="mt-5 sm:mt-6 space-y-4">
+          <label className="block text-xs sm:text-sm font-semibold text-muted">
             Username
             <input
               type="text"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-ink/10 px-4 py-2"
+              className="mt-2 w-full rounded-xl sm:rounded-2xl border border-ink/10 px-3 sm:px-4 py-2 text-sm"
               required
             />
           </label>
 
-          <label className="block text-sm font-semibold text-muted">
+          <label className="block text-xs sm:text-sm font-semibold text-muted">
             Password
             <input
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-ink/10 px-4 py-2"
+              className="mt-2 w-full rounded-xl sm:rounded-2xl border border-ink/10 px-3 sm:px-4 py-2 text-sm"
               required
             />
           </label>
 
-          {error ? <p className="text-sm text-pending">{error}</p> : null}
+          {error ? <p className="text-xs sm:text-sm text-pending">{error}</p> : null}
 
           <button
             type="submit"
-            className="w-full rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white"
+            className="w-full rounded-full bg-ink px-4 py-2.5 text-xs sm:text-sm font-semibold text-white"
           >
             Login
           </button>
