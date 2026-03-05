@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+}
+
+body {
+  background: radial-gradient(circle at 15% 20%, #ffd2eb 0%, rgba(255, 210, 235, 0) 45%),
+    radial-gradient(circle at 85% 15%, #ffd4b8 0%, rgba(255, 212, 184, 0) 48%),
+    radial-gradient(circle at 80% 80%, #cfe2ff 0%, rgba(207, 226, 255, 0) 55%),
+    linear-gradient(180deg, #fff3f7 0%, #fffaf2 45%, #f2f7ff 100%);
+  min-height: 100vh;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
