@@ -62,12 +62,12 @@ main
 
 **Build Command:**
 ```bash
-cd frontend && npm install && npm run build && cd ../backend && npm install
+npm ci --prefix frontend && npm run build --prefix frontend && npm ci --prefix backend
 ```
 
 **Start Command:**
 ```bash
-cd backend && npm start
+npm start --prefix backend
 ```
 
 ## Step 3: Configure Environment Variables
