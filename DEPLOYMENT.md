@@ -62,7 +62,7 @@ main
 
 **Build Command:**
 ```bash
-npm ci --prefix frontend && npm run build --prefix frontend && npm ci --prefix backend
+npm ci --include=dev --prefix frontend && npm run build --prefix frontend && npm ci --prefix backend
 ```
 
 **Start Command:**
@@ -210,3 +210,4 @@ Render automatically provides SSL certificates for all services. Your app runs o
 ---
 
 **Deployed at:** `https://punnam-rent-manager.onrender.com`
+

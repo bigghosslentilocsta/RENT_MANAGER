@@ -104,8 +104,8 @@ See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for complete step-by-step deployment in
 
 **Quick Summary:**
 1. Connect GitHub repo to Render
-2. Set build command: `cd frontend && npm install && npm run build && cd ../backend && npm install`
-3. Set start command: `cd backend && npm start`
+2. Set build command: `npm ci --include=dev --prefix frontend && npm run build --prefix frontend && npm ci --prefix backend`
+3. Set start command: `npm start --prefix backend`
 4. Add environment variables (MongoDB URI, PORT, NODE_ENV)
 5. Deploy!
 
@@ -201,3 +201,4 @@ This project is open source and available under the MIT License.
 ---
 
 **Need help?** Check [DEPLOYMENT.md](./DEPLOYMENT.md) for deployment troubleshooting.
+
