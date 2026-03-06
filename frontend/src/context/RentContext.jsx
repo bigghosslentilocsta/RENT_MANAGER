@@ -210,6 +210,33 @@ export const RentProvider = ({ children }) => {
 
   useEffect(() => {
     loadDashboard();
+    
+    // Auto-refresh every 15 seconds to sync data across devices
+    const intervalId = setInterval(() => {
+      loadDashboard();
+    }, 15000); // 15 seconds
+
+    // Refresh when tab/app becomes visible again
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadDashboard();
+      }
+    };
+
+    // Refresh when window gains focus
+    const handleFocus = () => {
+      loadDashboard();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    // Cleanup listeners on unmount
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const value = useMemo(

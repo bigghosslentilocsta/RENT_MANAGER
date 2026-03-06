@@ -48,11 +48,38 @@ const RentHistory = () => {
     setSelectedYear(year);
   }, []);
 
-  // Load rent history when month/year changes
+  // Load rent history when month/year changes, with auto-refresh
   useEffect(() => {
     if (selectedMonth && selectedYear) {
       const monthKey = `${selectedYear}-${selectedMonth}`;
       loadRentHistory(monthKey);
+
+      // Auto-refresh every 15 seconds to sync data across devices
+      const intervalId = setInterval(() => {
+        loadRentHistory(monthKey);
+      }, 15000);
+
+      // Refresh when tab/app becomes visible again
+      const handleVisibilityChange = () => {
+        if (!document.hidden) {
+          loadRentHistory(monthKey);
+        }
+      };
+
+      // Refresh when window gains focus
+      const handleFocus = () => {
+        loadRentHistory(monthKey);
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('focus', handleFocus);
+
+      // Cleanup listeners
+      return () => {
+        clearInterval(intervalId);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', handleFocus);
+      };
     }
   }, [selectedMonth, selectedYear]);
 

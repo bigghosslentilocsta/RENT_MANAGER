@@ -8,6 +8,33 @@ const TenantHistory = () => {
 
   useEffect(() => {
     loadHistory();
+
+    // Auto-refresh every 15 seconds to sync data across devices
+    const intervalId = setInterval(() => {
+      loadHistory();
+    }, 15000);
+
+    // Refresh when tab/app becomes visible again
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadHistory();
+      }
+    };
+
+    // Refresh when window gains focus
+    const handleFocus = () => {
+      loadHistory();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    // Cleanup listeners
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   return (
