@@ -43,13 +43,18 @@ const AddTenantModal = ({ open, flats, onClose }) => {
     if (!vacantFlats.length) {
       return;
     }
-    await moveIn({
-      ...form,
-      flatNumber: String(form.flatNumber),
-      agreedRent: Number(form.agreedRent),
-      agreedDeposit: Number(form.agreedDeposit)
-    });
-    onClose();
+    try {
+      await moveIn({
+        ...form,
+        flatNumber: String(form.flatNumber),
+        agreedRent: Number(form.agreedRent),
+        agreedDeposit: Number(form.agreedDeposit)
+      });
+      onClose(); // Only close if successful
+    } catch (error) {
+      alert(`Failed to add tenant: ${error.message}`);
+      // Modal stays open so user can correct the data
+    }
   };
 
   return (

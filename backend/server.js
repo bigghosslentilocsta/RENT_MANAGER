@@ -13,6 +13,14 @@ const NODE_ENV = process.env.NODE_ENV || "development";
 app.use(cors());
 app.use(express.json());
 
+// API data should always be fresh for dashboard/rent status on all devices.
+app.use("/api", (req, res, next) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  next();
+});
+
 app.use("/api", apiRoutes);
 
 // Serve frontend build in production

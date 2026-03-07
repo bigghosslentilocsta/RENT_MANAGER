@@ -4,6 +4,20 @@ const RentContext = createContext(null);
 
 const apiBase = import.meta.env.VITE_API_URL || "/api";
 
+const apiFetch = (path, options = {}) => {
+  const method = (options.method || "GET").toUpperCase();
+  const isGet = method === "GET";
+
+  return fetch(`${apiBase}${path}`, {
+    ...options,
+    cache: isGet ? "no-store" : options.cache,
+    headers: {
+      ...(isGet ? { "Cache-Control": "no-cache" } : {}),
+      ...(options.headers || {})
+    }
+  });
+};
+
 const formatCurrency = (value) => {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(
     value || 0
@@ -43,7 +57,7 @@ export const RentProvider = ({ children }) => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${apiBase}/dashboard`);
+      const response = await apiFetch("/dashboard");
       const data = await response.json();
       setFlats(data.flats || []);
       setMonth(data.month || "");
@@ -56,7 +70,7 @@ export const RentProvider = ({ children }) => {
 
   const loadHistory = async () => {
     try {
-      const response = await fetch(`${apiBase}/history`);
+      const response = await apiFetch("/history");
       const data = await response.json();
       setHistory(data.tenants || []);
     } catch (err) {
@@ -68,7 +82,7 @@ export const RentProvider = ({ children }) => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${apiBase}/tenants/${tenantId}/history`);
+      const response = await apiFetch(`/tenants/${tenantId}/history`);
       if (!response.ok) {
         const message = await response.json();
         throw new Error(message.message || "Unable to load tenant history.");
@@ -94,7 +108,7 @@ export const RentProvider = ({ children }) => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${apiBase}/tenants/${tenantId}/deposits`, {
+      const response = await apiFetch(`/tenants/${tenantId}/deposits`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -115,7 +129,7 @@ export const RentProvider = ({ children }) => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${apiBase}/move-in`, {
+      const response = await apiFetch("/move-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -127,6 +141,7 @@ export const RentProvider = ({ children }) => {
       await loadDashboard();
     } catch (err) {
       setError(err.message || "Move-in failed.");
+      throw err; // Re-throw so modal can catch and stay open
     } finally {
       setLoading(false);
     }
@@ -136,7 +151,7 @@ export const RentProvider = ({ children }) => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${apiBase}/vacate/${tenantId}`, { method: "POST" });
+      const response = await apiFetch(`/vacate/${tenantId}`, { method: "POST" });
       if (!response.ok) {
         const message = await response.json();
         throw new Error(message.message || "Vacate failed.");
@@ -154,7 +169,7 @@ export const RentProvider = ({ children }) => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${apiBase}/payments/${paymentId}`, {
+      const response = await apiFetch(`/payments/${paymentId}`, {
         method: "PATCH"
       });
       if (!response.ok) {
@@ -173,7 +188,7 @@ export const RentProvider = ({ children }) => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${apiBase}/rent-history?month=${monthKey}`);
+      const response = await apiFetch(`/rent-history?month=${monthKey}`);
       if (!response.ok) {
         const message = await response.json();
         throw new Error(message.message || "Unable to load rent history.");
@@ -191,7 +206,7 @@ export const RentProvider = ({ children }) => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${apiBase}/payments/${paymentId}/date`, {
+      const response = await apiFetch(`/payments/${paymentId}/date`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ paidDate })
@@ -210,32 +225,29 @@ export const RentProvider = ({ children }) => {
 
   useEffect(() => {
     loadDashboard();
-    
-    // Auto-refresh every 15 seconds to sync data across devices
+
+    // Auto-refresh every 30 seconds to sync data across devices
     const intervalId = setInterval(() => {
       loadDashboard();
-    }, 15000); // 15 seconds
+    }, 30000);
 
-    // Refresh when tab/app becomes visible again
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         loadDashboard();
       }
     };
 
-    // Refresh when window gains focus
     const handleFocus = () => {
       loadDashboard();
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleFocus);
 
-    // Cleanup listeners on unmount
     return () => {
       clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleFocus);
     };
   }, []);
 

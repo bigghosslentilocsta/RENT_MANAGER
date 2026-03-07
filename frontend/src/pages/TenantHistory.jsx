@@ -9,10 +9,10 @@ const TenantHistory = () => {
   useEffect(() => {
     loadHistory();
 
-    // Auto-refresh every 15 seconds to sync data across devices
+    // Auto-refresh every 30 seconds to sync data across devices
     const intervalId = setInterval(() => {
       loadHistory();
-    }, 15000);
+    }, 30000);
 
     // Refresh when tab/app becomes visible again
     const handleVisibilityChange = () => {

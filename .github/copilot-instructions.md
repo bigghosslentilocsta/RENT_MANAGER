@@ -52,15 +52,16 @@ Returns current month's flat and payment data with tenant details.
 Returns rent records for specified month.
 - Query param: `month` (format: YYYY-MM, e.g., "2026-03")
 - Returns: Array of rent records with flat, tenant, amount, status, paid date
+- Includes historical data from past tenants for accurate business reporting
 
 #### GET /api/history
 Returns all past tenants with stay duration.
 
 #### POST /api/move-in
-Create new tenant and occupancy.
+Create new tenant and occupancy (transactional).
 
 #### POST /api/vacate/:tenantId
-Mark tenant as vacated and free up flat.
+Mark tenant as vacated and free up flat (transactional).
 
 #### PATCH /api/payments/:id
 Toggle payment status between Paid/Pending.
@@ -70,13 +71,6 @@ Get payment and deposit history for specific tenant.
 
 #### POST /api/tenants/:tenantId/deposits
 Add deposit payment record for tenant.
-
-#### POST /api/backup
-Executes one-click backup process:
-- Runs mongodump to backup database
-- Commits to and pushes to git repository
-- Returns: success status, timestamp, completed steps
-- Uses Windows-compatible shell commands
 
 ### Models
 
@@ -94,34 +88,18 @@ Executes one-click backup process:
 ### Context & Hooks
 **RentContext** provides:
 - `flats`, `month`, `history`, `rentHistory`, `tenantHistory`
-- `loadDashboard()`, `loadHistory()`, `loadRentHistory(monthKey)`, `performBackup()`
+- `loadDashboard()`, `loadHistory()`, `loadRentHistory(monthKey)`
 - `moveIn()`, `vacate()`, `togglePayment()`
 - `formatCurrency()` - Format numbers as USD
-
-### Backup Configuration
-Located in `backend/src/utils/backupUtils.js`:
-- **MongoDB URL**: mongodb://localhost:27017
-- **Database Name**: rent_management
-- **Backup Path**: D:/Rent-Backups (create a separate git repo here)
-- **Git Branch**: main
-
-### Setup Instructions for Backup Feature
-
-1. **Create Backup Repository**:
-   ```bash
-   mkdir D:/Rent-Backups
-   cd D:/Rent-Backups
-   git init
-   git remote add origin <your-repo-url>
-- `moveIn()`, `vacate()`, `togglePayment()`
-- `formatCurrency()` - Format numbers as USD
+- Auto-refresh polling: 30 seconds for all pages
 
 ### Database Configuration
 **MongoDB Atlas Cloud Storage** provides automatic backups and data safety:
 - Connection: `mongodb+srv://admin:<password>@healthcluster.p0oj6ri.mongodb.net/rent_management`
 - Database: rent_management
 - Configuration: Stored in `backend/.env` (MONGODB_URI)
-- No manual backup needed - Atlas handles data replication and backups automatically
+- Atlas handles data replication and backups automatically
+- Fail-fast mode in production: Server will not start if MONGODB_URI is missing
 
 ### Setup Instructions
 
@@ -147,4 +125,18 @@ Located in `backend/src/utils/backupUtils.js`:
 - **MongoDB Atlas**: All data is automatically backed up and replicated in the cloud
 - **No Manual Backups Required**: Data is safe with Atlas's infrastructure
 - **Connection String**: Stored securely in MONGODB_URI environment variable
+- **Database**: rent_management on Atlas cluster (healthcluster)Production Features
+- **MongoDB Atlas**: All data is automatically backed up and replicated in the cloud
+- **Error Handling**: Comprehensive try/catch blocks on all async routes with user-friendly error messages
+- **Transactions**: Move-in and vacate operations wrapped in MongoDB sessions for data consistency
+- **Data Validation**: Calendar dates validated to prevent invalid inputs (e.g., February 31st)
+- **Modal Error Handling**: Add Tenant modal stays open on API failure for data correction
+- **Optimized Polling**: 30-second auto-refresh intervals to reduce server load
+- **Fail-Fast DB**: Production mode requires MONGODB_URI environment variable
+- **Rent History Accuracy**: Includes past tenant data for complete historical reporting
+
+### Important Notes
+- **MongoDB Atlas**: All data automatically backed up and replicated in the cloud
+- **Connection String**: Stored securely in MONGODB_URI environment variable
 - **Database**: rent_management on Atlas cluster (healthcluster)
+- **Authentication**: Hardcoded credentials for family use only - no public deployment intended
