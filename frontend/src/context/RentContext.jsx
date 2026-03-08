@@ -226,10 +226,10 @@ export const RentProvider = ({ children }) => {
   useEffect(() => {
     loadDashboard();
 
-    // Auto-refresh every 30 seconds to sync data across devices
+    // Auto-refresh every 60 seconds to sync data across devices
     const intervalId = setInterval(() => {
       loadDashboard();
-    }, 30000);
+    }, 60000);
 
     const handleVisibilityChange = () => {
       if (!document.hidden) {

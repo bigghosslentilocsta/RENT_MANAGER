@@ -54,10 +54,10 @@ const RentHistory = () => {
       const monthKey = `${selectedYear}-${selectedMonth}`;
       loadRentHistory(monthKey);
 
-      // Auto-refresh every 30 seconds to sync data across devices
+      // Auto-refresh every 60 seconds to sync data across devices
       const intervalId = setInterval(() => {
         loadRentHistory(monthKey);
-      }, 30000);
+      }, 60000);
 
       // Refresh when tab/app becomes visible again
       const handleVisibilityChange = () => {
