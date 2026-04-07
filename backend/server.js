@@ -72,7 +72,8 @@ if (NODE_ENV === "production") {
   
   app.use(express.static(frontendBuildPath, { 
     maxAge: "1y",
-    etag: false 
+    etag: false,
+    index: false
   }));
   
   // Fallback route for React Router (never for direct file requests like .js/.css)
