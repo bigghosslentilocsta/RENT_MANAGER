@@ -3,12 +3,13 @@ import { X } from "lucide-react";
 import { useRent } from "../context/RentContext.jsx";
 
 const TenantHistoryModal = ({ open, onClose }) => {
-  const { tenantHistory, formatCurrency, addDepositPayment, updateTenantRent, loading } = useRent();
+  const { tenantHistory, formatCurrency, addDepositPayment, updateTenantRent, loading, error } = useRent();
   const tenant = tenantHistory.tenant;
   const payments = tenantHistory.payments || [];
   const depositPayments = tenantHistory.depositPayments || [];
   const [depositForm, setDepositForm] = useState({ amount: "", date: "", note: "" });
   const [rentInput, setRentInput] = useState("");
+  const [rentMessage, setRentMessage] = useState("");
 
   const depositSummary = useMemo(() => {
     const total = Number(tenant?.agreedDeposit) || 0;
@@ -20,6 +21,7 @@ const TenantHistoryModal = ({ open, onClose }) => {
   useEffect(() => {
     if (tenant?.agreedRent != null) {
       setRentInput(String(tenant.agreedRent));
+      setRentMessage("");
     }
   }, [tenant?._id, tenant?.agreedRent]);
 
@@ -49,9 +51,15 @@ const TenantHistoryModal = ({ open, onClose }) => {
     event.preventDefault();
     const nextRent = Number(rentInput);
     if (!Number.isFinite(nextRent) || nextRent <= 0) {
+      setRentMessage("Enter a valid rent amount greater than 0.");
       return;
     }
-    await updateTenantRent(tenant._id, nextRent);
+    try {
+      await updateTenantRent(tenant._id, nextRent);
+      setRentMessage("Rent updated successfully.");
+    } catch (submitError) {
+      setRentMessage(submitError?.message || error || "Unable to update rent.");
+    }
   };
 
   return (
@@ -91,6 +99,11 @@ const TenantHistoryModal = ({ open, onClose }) => {
                 Save
               </button>
             </form>
+            {rentMessage ? (
+              <p className={`mt-2 text-xs ${rentMessage.includes("success") ? "text-paid" : "text-pending"}`}>
+                {rentMessage}
+              </p>
+            ) : null}
           </div>
           <div className="rounded-xl sm:rounded-2xl border border-ink/10 bg-white p-3 sm:p-4">
             <p className="text-xs uppercase tracking-[0.15em] sm:tracking-[0.2em] text-muted">Deposit</p>
