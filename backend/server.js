@@ -75,8 +75,15 @@ if (NODE_ENV === "production") {
     etag: false 
   }));
   
-  // Fallback route for React Router - only for HTML pages
+  // Fallback route for React Router (never for direct file requests like .js/.css)
   app.get("*", (req, res) => {
+    if (path.extname(req.path)) {
+      return res.status(404).type("text/plain").send("Not Found");
+    }
+
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.sendFile(path.join(frontendBuildPath, "index.html"));
   });
