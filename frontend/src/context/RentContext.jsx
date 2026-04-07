@@ -11,7 +11,7 @@ const apiFetch = async (path, options = {}) => {
   const method = (options.method || "GET").toUpperCase();
   const isGet = method === "GET";
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
-  const maxAttempts = 2;
+  const maxAttempts = 4;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const response = await fetch(`${apiBase}${path}`, {
@@ -34,7 +34,7 @@ const apiFetch = async (path, options = {}) => {
     const contentType = response.headers.get("content-type") || "";
     const isHtmlError = contentType.includes("text/html") && response.status >= 500;
     if (isHtmlError && attempt < maxAttempts) {
-      await delay(800);
+      await delay(500 * attempt);
       continue;
     }
 
@@ -126,8 +126,8 @@ export const RentProvider = ({ children }) => {
     try {
       const response = await apiFetch(`/tenants/${tenantId}/history`);
       if (!response.ok) {
-        const message = await response.json();
-        throw new Error(message.message || "Unable to load tenant history.");
+        const message = await getErrorMessage(response, "Unable to load tenant history.");
+        throw new Error(message);
       }
       const data = await response.json();
       setTenantHistory({
@@ -156,8 +156,8 @@ export const RentProvider = ({ children }) => {
         body: JSON.stringify(payload)
       });
       if (!response.ok) {
-        const message = await response.json();
-        throw new Error(message.message || "Unable to add deposit payment.");
+        const message = await getErrorMessage(response, "Unable to add deposit payment.");
+        throw new Error(message);
       }
       await loadTenantHistory(tenantId);
     } catch (err) {
@@ -181,8 +181,39 @@ export const RentProvider = ({ children }) => {
         throw new Error(message);
       }
 
-      await loadTenantHistory(tenantId);
-      await loadDashboard();
+      // Optimistically reflect updated rent immediately in modal and flat cards.
+      setTenantHistory((prev) => ({
+        ...prev,
+        tenant: prev.tenant && prev.tenant._id === tenantId
+          ? { ...prev.tenant, agreedRent }
+          : prev.tenant,
+        payments: (prev.payments || []).map((payment) => {
+          if (payment.month >= month) {
+            return { ...payment, amount: agreedRent };
+          }
+          return payment;
+        })
+      }));
+
+      setFlats((prev) =>
+        (prev || []).map((flat) => {
+          if (flat?.currentTenant?._id === tenantId) {
+            return {
+              ...flat,
+              paymentAmount: agreedRent,
+              currentTenant: {
+                ...flat.currentTenant,
+                agreedRent
+              }
+            };
+          }
+          return flat;
+        })
+      );
+
+      // Refresh in background; keep optimistic values if transient API outage occurs.
+      loadTenantHistory(tenantId).catch(() => {});
+      loadDashboard().catch(() => {});
     } catch (err) {
       setError(err.message || "Unable to update tenant rent.");
       throw err;
@@ -201,8 +232,8 @@ export const RentProvider = ({ children }) => {
         body: JSON.stringify(payload)
       });
       if (!response.ok) {
-        const message = await response.json();
-        throw new Error(message.message || "Move-in failed.");
+        const message = await getErrorMessage(response, "Move-in failed.");
+        throw new Error(message);
       }
       await loadDashboard();
     } catch (err) {
@@ -219,8 +250,8 @@ export const RentProvider = ({ children }) => {
     try {
       const response = await apiFetch(`/vacate/${tenantId}`, { method: "POST" });
       if (!response.ok) {
-        const message = await response.json();
-        throw new Error(message.message || "Vacate failed.");
+        const message = await getErrorMessage(response, "Vacate failed.");
+        throw new Error(message);
       }
       await loadDashboard();
       await loadHistory();
@@ -239,8 +270,8 @@ export const RentProvider = ({ children }) => {
         method: "PATCH"
       });
       if (!response.ok) {
-        const message = await response.json();
-        throw new Error(message.message || "Payment update failed.");
+        const message = await getErrorMessage(response, "Payment update failed.");
+        throw new Error(message);
       }
       await loadDashboard();
     } catch (err) {
@@ -256,8 +287,8 @@ export const RentProvider = ({ children }) => {
     try {
       const response = await apiFetch(`/rent-history?month=${monthKey}`);
       if (!response.ok) {
-        const message = await response.json();
-        throw new Error(message.message || "Unable to load rent history.");
+        const message = await getErrorMessage(response, "Unable to load rent history.");
+        throw new Error(message);
       }
       const data = await response.json();
       setRentHistory(data.records || []);
