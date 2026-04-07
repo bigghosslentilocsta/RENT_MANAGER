@@ -60,10 +60,24 @@ app.use("/api", authenticateRequest, apiRoutes);
 // Serve frontend build in production
 if (NODE_ENV === "production") {
   const frontendBuildPath = path.join(__dirname, "../frontend/dist");
-  app.use(express.static(frontendBuildPath));
   
-  // Fallback route for React Router
+  // Log debug info
+  console.log(`Serving static files from: ${frontendBuildPath}`);
+  const fs = require("fs");
+  if (!fs.existsSync(frontendBuildPath)) {
+    console.warn(`⚠️  WARNING: Frontend dist folder not found at ${frontendBuildPath}`);
+  } else {
+    console.log(`✓ Frontend dist folder found`);
+  }
+  
+  app.use(express.static(frontendBuildPath, { 
+    maxAge: "1y",
+    etag: false 
+  }));
+  
+  // Fallback route for React Router - only for HTML pages
   app.get("*", (req, res) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.sendFile(path.join(frontendBuildPath, "index.html"));
   });
 } else {
