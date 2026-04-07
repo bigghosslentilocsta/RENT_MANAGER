@@ -1,22 +1,38 @@
 import { useState } from "react";
 
-const VALID_USERNAME = "PUNNAM444";
-const VALID_PASSWORD = "PUNNAM444";
+const apiBase = import.meta.env.VITE_API_URL || "/api";
 
 const LoginPage = ({ onLoginSuccess }) => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    if (username === VALID_USERNAME && password === VALID_PASSWORD) {
+    setError("");
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${apiBase}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.token) {
+        throw new Error(payload?.message || "Invalid username or password.");
+      }
+
+      localStorage.setItem("authToken", payload.token);
       localStorage.setItem("isLoggedIn", "true");
       onLoginSuccess();
-      return;
+    } catch (loginError) {
+      setError(loginError.message || "Invalid username or password.");
+    } finally {
+      setLoading(false);
     }
-
-    setError("Invalid username or password.");
   };
 
   return (
@@ -52,9 +68,10 @@ const LoginPage = ({ onLoginSuccess }) => {
 
           <button
             type="submit"
+            disabled={loading}
             className="w-full rounded-full bg-ink px-4 py-2.5 text-xs sm:text-sm font-semibold text-white"
           >
-            Login
+            {loading ? "Signing in..." : "Login"}
           </button>
         </form>
       </div>

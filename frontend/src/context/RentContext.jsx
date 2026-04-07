@@ -3,18 +3,29 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 const RentContext = createContext(null);
 
 const apiBase = import.meta.env.VITE_API_URL || "/api";
+const AUTH_TOKEN_KEY = "authToken";
 
 const apiFetch = (path, options = {}) => {
   const method = (options.method || "GET").toUpperCase();
   const isGet = method === "GET";
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
 
   return fetch(`${apiBase}${path}`, {
     ...options,
     cache: isGet ? "no-store" : options.cache,
     headers: {
       ...(isGet ? { "Cache-Control": "no-cache" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {})
     }
+  }).then((response) => {
+    if (response.status === 401) {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem("isLoggedIn");
+      window.dispatchEvent(new Event("auth:logout"));
+    }
+
+    return response;
   });
 };
 
@@ -58,11 +69,15 @@ export const RentProvider = ({ children }) => {
     setError("");
     try {
       const response = await apiFetch("/dashboard");
+      if (!response.ok) {
+        const message = await getErrorMessage(response, "Unable to load dashboard data.");
+        throw new Error(message);
+      }
       const data = await response.json();
       setFlats(data.flats || []);
       setMonth(data.month || "");
     } catch (err) {
-      setError("Unable to load dashboard data.");
+      setError(err.message || "Unable to load dashboard data.");
     } finally {
       setLoading(false);
     }
@@ -71,10 +86,14 @@ export const RentProvider = ({ children }) => {
   const loadHistory = async () => {
     try {
       const response = await apiFetch("/history");
+      if (!response.ok) {
+        const message = await getErrorMessage(response, "Unable to load history.");
+        throw new Error(message);
+      }
       const data = await response.json();
       setHistory(data.tenants || []);
     } catch (err) {
-      setError("Unable to load history.");
+      setError(err.message || "Unable to load history.");
     }
   };
 

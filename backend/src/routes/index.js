@@ -5,6 +5,7 @@ const Tenant = require("../models/Tenant");
 const Payment = require("../models/Payment");
 const DepositPayment = require("../models/DepositPayment");
 const { ensureFlatsSeeded } = require("../config/db");
+const { issueAuthToken, validateLogin } = require("../config/auth");
 
 const router = express.Router();
 const flatOrder = ["g1", "101", "201", "202", "203", "301", "302", "303", "401", "402", "403"];
@@ -18,27 +19,52 @@ const getMonthKey = (date = new Date()) => {
 };
 
 const ensureCurrentMonthPayments = async (tenants, monthKey) => {
-  const tasks = tenants.map((tenant) => {
-    return Payment.findOneAndUpdate(
-      { tenantId: tenant._id, month: monthKey },
-      {
-        $setOnInsert: {
-          flatId: tenant.flatId,
-          amount: tenant.agreedRent,
-          status: "Pending",
-          date: null
-        }
-      },
-      { upsert: true, new: true }
-    );
-  });
+  if (!tenants.length) {
+    return;
+  }
 
-  await Promise.all(tasks);
+  const tenantIds = tenants.map((tenant) => tenant._id);
+  const existing = await Payment.find({ tenantId: { $in: tenantIds }, month: monthKey })
+    .select("tenantId")
+    .lean();
+
+  const existingTenantIds = new Set(existing.map((payment) => String(payment.tenantId)));
+  const missingDocs = tenants
+    .filter((tenant) => !existingTenantIds.has(String(tenant._id)))
+    .map((tenant) => ({
+      tenantId: tenant._id,
+      flatId: tenant.flatId,
+      amount: tenant.agreedRent,
+      month: monthKey,
+      status: "Pending",
+      date: null
+    }));
+
+  if (missingDocs.length > 0) {
+    await Payment.insertMany(missingDocs, { ordered: false });
+  }
 };
+
+router.post("/auth/login", async (req, res) => {
+  try {
+    const { username, password } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({ message: "Username and password are required." });
+    }
+
+    if (!validateLogin(username, password)) {
+      return res.status(401).json({ message: "Invalid username or password." });
+    }
+
+    const token = issueAuthToken();
+    return res.json({ token });
+  } catch (error) {
+    return res.status(500).json({ message: "Unable to process login." });
+  }
+});
 
 router.get("/dashboard", async (req, res) => {
   try {
-    await ensureFlatsSeeded();
     const monthKey = getMonthKey();
 
     const flats = await Flat.find({ number: { $in: flatOrder } }).populate("currentTenant").lean();
@@ -162,6 +188,11 @@ router.post("/vacate/:tenantId", async (req, res) => {
   
   try {
     const { tenantId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(tenantId)) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: "Invalid tenant id" });
+    }
+
     const tenant = await Tenant.findById(tenantId).session(session);
     if (!tenant) {
       await session.abortTransaction();
@@ -174,9 +205,27 @@ router.post("/vacate/:tenantId", async (req, res) => {
     }
 
     const flat = tenant.flatId ? await Flat.findById(tenant.flatId).session(session) : null;
+    const vacatingAt = new Date();
+    const monthKey = getMonthKey(vacatingAt);
+    const flatIdForPayment = flat?._id || tenant.flatId;
+
+    if (flatIdForPayment) {
+      await Payment.findOneAndUpdate(
+        { tenantId: tenant._id, month: monthKey },
+        {
+          $set: {
+            flatId: flatIdForPayment,
+            amount: tenant.agreedRent,
+            status: "Paid",
+            date: vacatingAt
+          }
+        },
+        { upsert: true, new: true, session }
+      );
+    }
 
     tenant.status = "Past";
-    tenant.vacatingDate = new Date();
+    tenant.vacatingDate = vacatingAt;
     tenant.flatId = null;
     await tenant.save({ session });
 

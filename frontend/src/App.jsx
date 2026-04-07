@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RentProvider, useRent } from "./context/RentContext.jsx";
 import { useTranslation } from "./context/TranslationContext.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
@@ -67,7 +67,13 @@ const HeaderContent = ({ view, setView }) => {
 
 const App = () => {
   const [view, setView] = useState("dashboard");
-  const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem("isLoggedIn") === "true");
+  const [isLoggedIn, setIsLoggedIn] = useState(Boolean(localStorage.getItem("authToken")));
+
+  useEffect(() => {
+    const handleLogout = () => setIsLoggedIn(false);
+    window.addEventListener("auth:logout", handleLogout);
+    return () => window.removeEventListener("auth:logout", handleLogout);
+  }, []);
 
   if (!isLoggedIn) {
     return <LoginPage onLoginSuccess={() => setIsLoggedIn(true)} />;
