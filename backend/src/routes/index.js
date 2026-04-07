@@ -379,7 +379,6 @@ router.patch("/tenants/:tenantId/rent", async (req, res) => {
     await Payment.updateMany(
       {
         tenantId: tenant._id,
-        status: "Pending",
         month: { $gte: currentMonthKey }
       },
       {
