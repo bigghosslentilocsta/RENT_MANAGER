@@ -12,6 +12,7 @@ dotenv.config();
 
 const app = express();
 const NODE_ENV = process.env.NODE_ENV || "development";
+let isDbReady = false;
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:5173,http://127.0.0.1:5173")
   .split(",")
   .map((origin) => origin.trim())
@@ -55,6 +56,14 @@ app.use("/api", (req, res, next) => {
   next();
 });
 
+app.use("/api", (req, res, next) => {
+  if (!isDbReady) {
+    return res.status(503).json({ message: "Service is starting. Please retry in a few seconds." });
+  }
+
+  return next();
+});
+
 app.use("/api", authenticateRequest, apiRoutes);
 
 // Serve frontend build in production
@@ -96,11 +105,33 @@ if (NODE_ENV === "production") {
 
 const port = process.env.PORT || 5000;
 
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const initializeDatabaseWithRetry = async () => {
+  const retryDelayMs = 5000;
+
+  while (!isDbReady) {
+    try {
+      await connectDb();
+      await ensureFlatsSeeded();
+      isDbReady = true;
+      console.log("Database is ready.");
+    } catch (error) {
+      console.error("Database initialization failed. Retrying in 5 seconds...");
+      console.error(error.message || error);
+      await delay(retryDelayMs);
+    }
+  }
+};
+
 const startServer = async () => {
-  await connectDb();
-  await ensureFlatsSeeded();
   app.listen(port, () => {
     console.log(`Server running on port ${port}`);
+  });
+
+  initializeDatabaseWithRetry().catch((error) => {
+    console.error("Unexpected database initialization error.");
+    console.error(error.message || error);
   });
 };
 
