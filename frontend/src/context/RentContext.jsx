@@ -5,10 +5,41 @@ const RentContext = createContext(null);
 const apiBase = import.meta.env.VITE_API_URL || "/api";
 const AUTH_TOKEN_KEY = "authToken";
 
-const apiFetch = (path, options = {}) => {
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const apiFetch = async (path, options = {}) => {
   const method = (options.method || "GET").toUpperCase();
   const isGet = method === "GET";
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  const maxAttempts = 2;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const response = await fetch(`${apiBase}${path}`, {
+      ...options,
+      cache: isGet ? "no-store" : options.cache,
+      headers: {
+        ...(isGet ? { "Cache-Control": "no-cache" } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers || {})
+      }
+    });
+
+    if (response.status === 401) {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem("isLoggedIn");
+      window.dispatchEvent(new Event("auth:logout"));
+      return response;
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    const isHtmlError = contentType.includes("text/html") && response.status >= 500;
+    if (isHtmlError && attempt < maxAttempts) {
+      await delay(800);
+      continue;
+    }
+
+    return response;
+  }
 
   return fetch(`${apiBase}${path}`, {
     ...options,
@@ -18,14 +49,6 @@ const apiFetch = (path, options = {}) => {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {})
     }
-  }).then((response) => {
-    if (response.status === 401) {
-      localStorage.removeItem(AUTH_TOKEN_KEY);
-      localStorage.removeItem("isLoggedIn");
-      window.dispatchEvent(new Event("auth:logout"));
-    }
-
-    return response;
   });
 };
 
@@ -45,7 +68,7 @@ const getErrorMessage = async (response, fallbackMessage) => {
 
   const text = await response.text().catch(() => "");
   if (text.includes("<!DOCTYPE") || text.includes("<html")) {
-    return "API returned HTML instead of JSON. Ensure backend is running and frontend proxy/API URL points to /api.";
+    return "Server is temporarily unavailable (returned HTML error page). Please wait a few seconds and retry.";
   }
 
   return fallbackMessage;
