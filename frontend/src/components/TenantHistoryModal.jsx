@@ -1,13 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { useRent } from "../context/RentContext.jsx";
 
 const TenantHistoryModal = ({ open, onClose }) => {
-  const { tenantHistory, formatCurrency, addDepositPayment, loading } = useRent();
+  const { tenantHistory, formatCurrency, addDepositPayment, updateTenantRent, loading } = useRent();
   const tenant = tenantHistory.tenant;
   const payments = tenantHistory.payments || [];
   const depositPayments = tenantHistory.depositPayments || [];
   const [depositForm, setDepositForm] = useState({ amount: "", date: "", note: "" });
+  const [rentInput, setRentInput] = useState("");
 
   const depositSummary = useMemo(() => {
     const total = Number(tenant?.agreedDeposit) || 0;
@@ -15,6 +16,12 @@ const TenantHistoryModal = ({ open, onClose }) => {
     const balance = Math.max(0, total - paid);
     return { total, paid, balance };
   }, [tenant, depositPayments]);
+
+  useEffect(() => {
+    if (tenant?.agreedRent != null) {
+      setRentInput(String(tenant.agreedRent));
+    }
+  }, [tenant?._id, tenant?.agreedRent]);
 
   if (!open || !tenant) {
     return null;
@@ -38,6 +45,15 @@ const TenantHistoryModal = ({ open, onClose }) => {
     setDepositForm({ amount: "", date: "", note: "" });
   };
 
+  const handleRentSubmit = async (event) => {
+    event.preventDefault();
+    const nextRent = Number(rentInput);
+    if (!Number.isFinite(nextRent) || nextRent <= 0) {
+      return;
+    }
+    await updateTenantRent(tenant._id, nextRent);
+  };
+
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/40 p-3 sm:p-6">
       <div className="w-full max-w-2xl rounded-2xl sm:rounded-3xl bg-white/95 p-4 sm:p-6 shadow-card max-h-[90vh] overflow-y-auto">
@@ -55,6 +71,26 @@ const TenantHistoryModal = ({ open, onClose }) => {
           <div className="rounded-xl sm:rounded-2xl border border-ink/10 bg-white p-3 sm:p-4">
             <p className="text-xs uppercase tracking-[0.15em] sm:tracking-[0.2em] text-muted">Agreed Rent</p>
             <p className="mt-1 sm:mt-2 text-base sm:text-lg font-semibold">{formatCurrency(tenant.agreedRent)}</p>
+            <form onSubmit={handleRentSubmit} className="mt-3 flex items-end gap-2">
+              <label className="flex-1 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
+                Edit
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={rentInput}
+                  onChange={(event) => setRentInput(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-ink/10 px-2 py-1 text-sm"
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={loading || !rentInput}
+                className="rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+              >
+                Save
+              </button>
+            </form>
           </div>
           <div className="rounded-xl sm:rounded-2xl border border-ink/10 bg-white p-3 sm:p-4">
             <p className="text-xs uppercase tracking-[0.15em] sm:tracking-[0.2em] text-muted">Deposit</p>

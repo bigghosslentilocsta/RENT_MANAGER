@@ -351,6 +351,49 @@ router.post("/tenants/:tenantId/deposits", async (req, res) => {
   }
 });
 
+router.patch("/tenants/:tenantId/rent", async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(tenantId)) {
+      return res.status(400).json({ message: "Invalid tenant id" });
+    }
+
+    const numericRent = Number(req.body?.agreedRent);
+    if (!Number.isFinite(numericRent) || numericRent <= 0) {
+      return res.status(400).json({ message: "Rent must be a number greater than 0" });
+    }
+
+    const tenant = await Tenant.findById(tenantId);
+    if (!tenant) {
+      return res.status(404).json({ message: "Tenant not found" });
+    }
+
+    if (tenant.status !== "Active") {
+      return res.status(400).json({ message: "Rent can only be edited for active tenants" });
+    }
+
+    tenant.agreedRent = numericRent;
+    await tenant.save();
+
+    const currentMonthKey = getMonthKey();
+    await Payment.updateMany(
+      {
+        tenantId: tenant._id,
+        status: "Pending",
+        month: { $gte: currentMonthKey }
+      },
+      {
+        $set: { amount: numericRent }
+      }
+    );
+
+    return res.json({ tenant });
+  } catch (error) {
+    console.error("Update rent error:", error);
+    return res.status(500).json({ message: "Unable to update tenant rent" });
+  }
+});
+
 router.get("/history", async (req, res) => {
   try {
     const tenants = await Tenant.find({ status: "Past" }).sort({ vacatingDate: -1 }).lean();

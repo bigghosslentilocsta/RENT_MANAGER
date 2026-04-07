@@ -144,6 +144,30 @@ export const RentProvider = ({ children }) => {
     }
   };
 
+  const updateTenantRent = async (tenantId, agreedRent) => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await apiFetch(`/tenants/${tenantId}/rent`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agreedRent })
+      });
+      if (!response.ok) {
+        const message = await getErrorMessage(response, "Unable to update tenant rent.");
+        throw new Error(message);
+      }
+
+      await loadTenantHistory(tenantId);
+      await loadDashboard();
+    } catch (err) {
+      setError(err.message || "Unable to update tenant rent.");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const moveIn = async (payload) => {
     setLoading(true);
     setError("");
@@ -287,6 +311,7 @@ export const RentProvider = ({ children }) => {
       loadTenantHistory,
       clearTenantHistory,
       addDepositPayment,
+      updateTenantRent,
       moveIn,
       vacate,
       togglePayment
