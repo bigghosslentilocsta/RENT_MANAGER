@@ -18,6 +18,94 @@ const getMonthKey = (date = new Date()) => {
   return date.toISOString().slice(0, 7);
 };
 
+const isValidMonthKey = (value) => /^\d{4}-\d{2}$/.test(String(value || ""));
+const isValidDateInput = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+
+const parseDateInput = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value;
+  }
+
+  if (!isValidDateInput(value)) {
+    return null;
+  }
+
+  const [year, month, day] = String(value).split("-").map(Number);
+  const parsed = new Date(year, month - 1, day, 12, 0, 0);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  if (parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) {
+    return null;
+  }
+
+  return parsed;
+};
+
+const findFlatByNumber = async (flatNumber, session = null) => {
+  return Flat.findOne({ number: String(flatNumber || "").trim() }).session(session || null);
+};
+
+const findActiveTenantByFlatNumber = async (flatNumber, session = null) => {
+  const flat = await findFlatByNumber(flatNumber, session);
+  if (!flat) {
+    return { flat: null, tenant: null };
+  }
+
+  await reconcileFlatOccupancy(flat, session);
+  if (!flat.currentTenant) {
+    return { flat, tenant: null };
+  }
+
+  const tenant = await Tenant.findById(flat.currentTenant).session(session || null);
+  if (!tenant || tenant.status !== "Active") {
+    return { flat, tenant: null };
+  }
+
+  return { flat, tenant };
+};
+
+const upsertPaymentForTenantMonth = async ({ tenant, flat, monthKey, amount, status, paidDate, session }) => {
+  const update = {
+    flatId: flat._id,
+    amount,
+    status,
+    date: status === "Paid" ? (paidDate || new Date()) : null
+  };
+
+  return Payment.findOneAndUpdate(
+    { tenantId: tenant._id, month: monthKey },
+    { $set: update },
+    { upsert: true, new: true, session }
+  );
+};
+
+const reconcileFlatOccupancy = async (flat, session = null) => {
+  if (!flat?.isOccupied) {
+    return flat;
+  }
+
+  if (!flat.currentTenant) {
+    flat.isOccupied = false;
+    await flat.save(session ? { session } : undefined);
+    return flat;
+  }
+
+  const tenant = await Tenant.findById(flat.currentTenant).session(session || null);
+  if (!tenant || tenant.status !== "Active") {
+    flat.isOccupied = false;
+    flat.currentTenant = null;
+    await flat.save(session ? { session } : undefined);
+  }
+
+  return flat;
+};
+
 const ensureCurrentMonthPayments = async (tenants, monthKey) => {
   if (!tenants.length) {
     return;
@@ -133,6 +221,8 @@ router.post("/move-in", async (req, res) => {
       await session.abortTransaction();
       return res.status(404).json({ message: "Flat not found" });
     }
+
+    await reconcileFlatOccupancy(flat, session);
 
     if (flat.isOccupied) {
       await session.abortTransaction();
@@ -344,10 +434,52 @@ router.post("/tenants/:tenantId/deposits", async (req, res) => {
       note: note || ""
     });
 
+    // Keep tenant total deposit in sync with each new deposit payment.
+    tenant.agreedDeposit = Number(tenant.agreedDeposit || 0) + numericAmount;
+    await tenant.save();
+
     res.status(201).json({ depositPayment });
   } catch (error) {
     console.error("Add deposit error:", error);
     res.status(500).json({ message: "Failed to add deposit payment" });
+  }
+});
+
+router.delete("/tenants/:tenantId/deposits/:depositId", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { tenantId, depositId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(tenantId) || !mongoose.Types.ObjectId.isValid(depositId)) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: "Invalid tenant or deposit id" });
+    }
+
+    const tenant = await Tenant.findById(tenantId).session(session);
+    if (!tenant) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: "Tenant not found" });
+    }
+
+    const depositPayment = await DepositPayment.findOne({ _id: depositId, tenantId }).session(session);
+    if (!depositPayment) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: "Deposit payment not found" });
+    }
+
+    tenant.agreedDeposit = Math.max(0, Number(tenant.agreedDeposit || 0) - Number(depositPayment.amount || 0));
+    await tenant.save({ session });
+    await DepositPayment.deleteOne({ _id: depositId }).session(session);
+
+    await session.commitTransaction();
+    res.json({ message: "Deposit payment deleted" });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("Delete deposit error:", error);
+    res.status(500).json({ message: "Failed to delete deposit payment" });
+  } finally {
+    session.endSession();
   }
 });
 
@@ -451,6 +583,326 @@ router.get("/rent-history", async (req, res) => {
   } catch (error) {
     console.error("Rent history error:", error);
     res.status(500).json({ message: "Unable to load rent history" });
+  }
+});
+
+router.post("/sync/sheet-actions", async (req, res) => {
+  try {
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    if (!rows.length) {
+      return res.status(400).json({ message: "rows array is required" });
+    }
+
+    const results = [];
+
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index] || {};
+      const session = await mongoose.startSession();
+      session.startTransaction();
+
+      try {
+        const action = String(row.action || "").trim().toUpperCase();
+        if (!action) {
+          throw new Error("action is required");
+        }
+
+        if (action === "MOVE_IN") {
+          const required = ["flatNumber", "name", "phone", "agreedRent", "leaseStart"];
+          const missing = required.filter((key) => !row[key]);
+          if (missing.length) {
+            throw new Error(`Missing fields: ${missing.join(", ")}`);
+          }
+
+          await ensureFlatsSeeded();
+          const flat = await findFlatByNumber(row.flatNumber, session);
+          if (!flat) {
+            throw new Error("Flat not found");
+          }
+
+          await reconcileFlatOccupancy(flat, session);
+          if (flat.isOccupied) {
+            throw new Error("Flat is already occupied");
+          }
+
+          const leaseStartDate = parseDateInput(row.leaseStart);
+          if (!leaseStartDate) {
+            throw new Error("Invalid leaseStart. Use YYYY-MM-DD");
+          }
+
+          const leaseEndDate = row.leaseEnd ? parseDateInput(row.leaseEnd) : null;
+          if (row.leaseEnd && !leaseEndDate) {
+            throw new Error("Invalid leaseEnd. Use YYYY-MM-DD");
+          }
+
+          const agreedRent = Number(row.agreedRent);
+          if (!Number.isFinite(agreedRent) || agreedRent <= 0) {
+            throw new Error("agreedRent must be a number greater than 0");
+          }
+
+          const tenant = await Tenant.create([
+            {
+              name: row.name,
+              phone: row.phone,
+              agreedRent,
+              agreedDeposit: Number(row.agreedDeposit) || 0,
+              leaseStart: leaseStartDate,
+              leaseEnd: leaseEndDate,
+              status: "Active",
+              flatId: flat._id
+            }
+          ], { session });
+
+          flat.isOccupied = true;
+          flat.currentTenant = tenant[0]._id;
+          if (row.baseRent != null && row.baseRent !== "") {
+            const baseRent = Number(row.baseRent);
+            if (!Number.isFinite(baseRent) || baseRent < 0) {
+              throw new Error("baseRent must be a non-negative number");
+            }
+            flat.baseRent = baseRent;
+          }
+          await flat.save({ session });
+
+          const monthKey = isValidMonthKey(row.month) ? row.month : getMonthKey();
+          await Payment.findOneAndUpdate(
+            { tenantId: tenant[0]._id, month: monthKey },
+            {
+              $setOnInsert: {
+                flatId: flat._id,
+                amount: agreedRent,
+                status: "Pending",
+                date: null
+              }
+            },
+            { upsert: true, new: true, session }
+          );
+
+          await session.commitTransaction();
+          results.push({ index, action, ok: true, message: "Tenant moved in", tenantId: tenant[0]._id });
+          continue;
+        }
+
+        if (action === "VACATE") {
+          let tenant = null;
+          let flat = null;
+
+          if (row.tenantId && mongoose.Types.ObjectId.isValid(row.tenantId)) {
+            tenant = await Tenant.findById(row.tenantId).session(session);
+            if (tenant?.flatId) {
+              flat = await Flat.findById(tenant.flatId).session(session);
+            }
+          } else if (row.flatNumber) {
+            const found = await findActiveTenantByFlatNumber(row.flatNumber, session);
+            tenant = found.tenant;
+            flat = found.flat;
+          }
+
+          if (!tenant) {
+            throw new Error("Active tenant not found for VACATE");
+          }
+
+          if (tenant.status === "Past") {
+            throw new Error("Tenant is already vacated");
+          }
+
+          const vacatingAt = row.vacatingDate ? parseDateInput(row.vacatingDate) : new Date();
+          if (row.vacatingDate && !vacatingAt) {
+            throw new Error("Invalid vacatingDate. Use YYYY-MM-DD");
+          }
+
+          const monthKey = getMonthKey(vacatingAt);
+          const flatIdForPayment = flat?._id || tenant.flatId;
+          if (flatIdForPayment) {
+            await Payment.findOneAndUpdate(
+              { tenantId: tenant._id, month: monthKey },
+              {
+                $set: {
+                  flatId: flatIdForPayment,
+                  amount: tenant.agreedRent,
+                  status: "Paid",
+                  date: vacatingAt
+                }
+              },
+              { upsert: true, new: true, session }
+            );
+          }
+
+          tenant.status = "Past";
+          tenant.vacatingDate = vacatingAt;
+          tenant.flatId = null;
+          await tenant.save({ session });
+
+          if (flat) {
+            flat.isOccupied = false;
+            flat.currentTenant = null;
+            await flat.save({ session });
+          }
+
+          await session.commitTransaction();
+          results.push({ index, action, ok: true, message: "Tenant vacated", tenantId: tenant._id });
+          continue;
+        }
+
+        if (action === "MARK_PAID" || action === "MARK_PENDING") {
+          if (!row.flatNumber) {
+            throw new Error("flatNumber is required");
+          }
+
+          const found = await findActiveTenantByFlatNumber(row.flatNumber, session);
+          if (!found.flat || !found.tenant) {
+            throw new Error("Active tenant not found for flat");
+          }
+
+          const monthKey = isValidMonthKey(row.month) ? row.month : getMonthKey();
+          const paidDate = row.paidDate ? parseDateInput(row.paidDate) : null;
+          if (row.paidDate && !paidDate) {
+            throw new Error("Invalid paidDate. Use YYYY-MM-DD");
+          }
+
+          await upsertPaymentForTenantMonth({
+            tenant: found.tenant,
+            flat: found.flat,
+            monthKey,
+            amount: found.tenant.agreedRent,
+            status: action === "MARK_PAID" ? "Paid" : "Pending",
+            paidDate,
+            session
+          });
+
+          await session.commitTransaction();
+          results.push({ index, action, ok: true, message: `Payment ${action === "MARK_PAID" ? "marked paid" : "marked pending"}` });
+          continue;
+        }
+
+        if (action === "UPDATE_RENT") {
+          if (!row.flatNumber || row.agreedRent == null || row.agreedRent === "") {
+            throw new Error("flatNumber and agreedRent are required");
+          }
+
+          const found = await findActiveTenantByFlatNumber(row.flatNumber, session);
+          if (!found.tenant) {
+            throw new Error("Active tenant not found for flat");
+          }
+
+          const agreedRent = Number(row.agreedRent);
+          if (!Number.isFinite(agreedRent) || agreedRent <= 0) {
+            throw new Error("agreedRent must be a number greater than 0");
+          }
+
+          found.tenant.agreedRent = agreedRent;
+          await found.tenant.save({ session });
+
+          const monthThreshold = isValidMonthKey(row.month) ? row.month : getMonthKey();
+          await Payment.updateMany(
+            { tenantId: found.tenant._id, month: { $gte: monthThreshold } },
+            { $set: { amount: agreedRent } },
+            { session }
+          );
+
+          await session.commitTransaction();
+          results.push({ index, action, ok: true, message: "Rent updated", tenantId: found.tenant._id });
+          continue;
+        }
+
+        if (action === "ADD_DEPOSIT") {
+          if (!row.flatNumber || row.amount == null || row.amount === "") {
+            throw new Error("flatNumber and amount are required");
+          }
+
+          const found = await findActiveTenantByFlatNumber(row.flatNumber, session);
+          if (!found.tenant) {
+            throw new Error("Active tenant not found for flat");
+          }
+
+          const numericAmount = Number(row.amount);
+          if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+            throw new Error("amount must be a number greater than 0");
+          }
+
+          const depositDate = row.date ? parseDateInput(row.date) : new Date();
+          if (row.date && !depositDate) {
+            throw new Error("Invalid date. Use YYYY-MM-DD");
+          }
+
+          const depositPayment = await DepositPayment.create([
+            {
+              tenantId: found.tenant._id,
+              amount: numericAmount,
+              date: depositDate,
+              note: row.note || ""
+            }
+          ], { session });
+
+          found.tenant.agreedDeposit = Number(found.tenant.agreedDeposit || 0) + numericAmount;
+          await found.tenant.save({ session });
+
+          await session.commitTransaction();
+          results.push({ index, action, ok: true, message: "Deposit added", depositId: depositPayment[0]._id });
+          continue;
+        }
+
+        if (action === "DELETE_DEPOSIT") {
+          if (!row.flatNumber || !row.depositId) {
+            throw new Error("flatNumber and depositId are required");
+          }
+
+          if (!mongoose.Types.ObjectId.isValid(row.depositId)) {
+            throw new Error("depositId is invalid");
+          }
+
+          const found = await findActiveTenantByFlatNumber(row.flatNumber, session);
+          if (!found.tenant) {
+            throw new Error("Active tenant not found for flat");
+          }
+
+          const depositPayment = await DepositPayment.findOne({
+            _id: row.depositId,
+            tenantId: found.tenant._id
+          }).session(session);
+
+          if (!depositPayment) {
+            throw new Error("Deposit payment not found for tenant");
+          }
+
+          found.tenant.agreedDeposit = Math.max(
+            0,
+            Number(found.tenant.agreedDeposit || 0) - Number(depositPayment.amount || 0)
+          );
+          await found.tenant.save({ session });
+          await DepositPayment.deleteOne({ _id: depositPayment._id }).session(session);
+
+          await session.commitTransaction();
+          results.push({ index, action, ok: true, message: "Deposit deleted", depositId: depositPayment._id });
+          continue;
+        }
+
+        throw new Error(`Unsupported action: ${action}`);
+      } catch (error) {
+        await session.abortTransaction();
+        results.push({
+          index,
+          action: String(row.action || ""),
+          ok: false,
+          message: error.message || "Action failed"
+        });
+      } finally {
+        session.endSession();
+      }
+    }
+
+    const succeeded = results.filter((item) => item.ok).length;
+    const failed = results.length - succeeded;
+    res.json({
+      summary: {
+        total: results.length,
+        succeeded,
+        failed
+      },
+      results
+    });
+  } catch (error) {
+    console.error("Sheet sync error:", error);
+    res.status(500).json({ message: "Unable to process sheet actions" });
   }
 });
 

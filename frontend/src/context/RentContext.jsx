@@ -167,6 +167,26 @@ export const RentProvider = ({ children }) => {
     }
   };
 
+  const deleteDepositPayment = async (tenantId, depositId) => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await apiFetch(`/tenants/${tenantId}/deposits/${depositId}`, {
+        method: "DELETE"
+      });
+      if (!response.ok) {
+        const message = await getErrorMessage(response, "Unable to delete deposit payment.");
+        throw new Error(message);
+      }
+      await loadTenantHistory(tenantId);
+    } catch (err) {
+      setError(err.message || "Unable to delete deposit payment.");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const updateTenantRent = async (tenantId, agreedRent) => {
     setLoading(true);
     setError("");
@@ -350,6 +370,7 @@ export const RentProvider = ({ children }) => {
       loadTenantHistory,
       clearTenantHistory,
       addDepositPayment,
+      deleteDepositPayment,
       updateTenantRent,
       moveIn,
       vacate,

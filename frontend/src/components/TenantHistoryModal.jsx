@@ -1,15 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import { useRent } from "../context/RentContext.jsx";
+import ConfirmationDialog from "./ConfirmationDialog.jsx";
 
 const TenantHistoryModal = ({ open, onClose }) => {
-  const { tenantHistory, formatCurrency, addDepositPayment, updateTenantRent, loading, error } = useRent();
+  const {
+    tenantHistory,
+    formatCurrency,
+    addDepositPayment,
+    deleteDepositPayment,
+    updateTenantRent,
+    loading,
+    error
+  } = useRent();
   const tenant = tenantHistory.tenant;
   const payments = tenantHistory.payments || [];
   const depositPayments = tenantHistory.depositPayments || [];
   const [depositForm, setDepositForm] = useState({ amount: "", date: "", note: "" });
   const [rentInput, setRentInput] = useState("");
   const [rentMessage, setRentMessage] = useState("");
+  const [depositToDelete, setDepositToDelete] = useState(null);
 
   const depositSummary = useMemo(() => {
     const total = Number(tenant?.agreedDeposit) || 0;
@@ -60,6 +70,23 @@ const TenantHistoryModal = ({ open, onClose }) => {
     } catch (submitError) {
       setRentMessage(submitError?.message || error || "Unable to update rent.");
     }
+  };
+
+  const openDeleteDepositDialog = (deposit) => {
+    setDepositToDelete(deposit);
+  };
+
+  const closeDeleteDepositDialog = () => {
+    setDepositToDelete(null);
+  };
+
+  const handleDeleteDeposit = async () => {
+    if (!depositToDelete) {
+      return;
+    }
+
+    await deleteDepositPayment(tenant._id, depositToDelete._id);
+    closeDeleteDepositDialog();
   };
 
   return (
@@ -196,7 +223,19 @@ const TenantHistoryModal = ({ open, onClose }) => {
                       {deposit.date ? new Date(deposit.date).toLocaleDateString('en-GB') : "-"}
                     </td>
                     <td className="px-4 py-3">{formatCurrency(deposit.amount)}</td>
-                    <td className="px-4 py-3 text-muted">{deposit.note || "-"}</td>
+                    <td className="px-4 py-3 text-muted">
+                      <div className="flex items-center justify-between gap-3">
+                        <span>{deposit.note || "-"}</span>
+                        <button
+                          type="button"
+                          onClick={() => openDeleteDepositDialog(deposit)}
+                          className="inline-flex items-center gap-1 rounded-full border border-pending/20 px-3 py-1 text-xs font-semibold text-pending hover:bg-pending/10"
+                        >
+                          <Trash2 size={14} />
+                          Delete
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -225,12 +264,20 @@ const TenantHistoryModal = ({ open, onClose }) => {
                     <p className="text-xs uppercase tracking-[0.1em] text-muted">Amount</p>
                     <p className="mt-1 text-sm font-semibold">{formatCurrency(deposit.amount)}</p>
                   </div>
-                  {deposit.note && (
-                    <div className="col-span-2">
-                      <p className="text-xs uppercase tracking-[0.1em] text-muted">Note</p>
-                      <p className="mt-1 text-sm text-muted">{deposit.note}</p>
-                    </div>
-                  )}
+                  <div className="col-span-2">
+                    <p className="text-xs uppercase tracking-[0.1em] text-muted">Note</p>
+                    <p className="mt-1 text-sm text-muted">{deposit.note || "-"}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <button
+                      type="button"
+                      onClick={() => openDeleteDepositDialog(deposit)}
+                      className="inline-flex items-center gap-1 rounded-full border border-pending/20 px-3 py-1.5 text-xs font-semibold text-pending hover:bg-pending/10"
+                    >
+                      <Trash2 size={14} />
+                      Delete deposit
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
@@ -317,6 +364,18 @@ const TenantHistoryModal = ({ open, onClose }) => {
           )}
         </div>
       </div>
+
+      <ConfirmationDialog
+        open={Boolean(depositToDelete)}
+        title="Delete deposit payment?"
+        message={depositToDelete ? `Remove ${formatCurrency(depositToDelete.amount)} from this tenant's deposit records?` : ""}
+        confirmText="Delete"
+        cancelText="Cancel"
+        isDangerous
+        isLoading={loading}
+        onConfirm={handleDeleteDeposit}
+        onCancel={closeDeleteDepositDialog}
+      />
     </div>
   );
 };
