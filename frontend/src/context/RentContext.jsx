@@ -323,28 +323,13 @@ export const RentProvider = ({ children }) => {
   useEffect(() => {
     loadDashboard();
 
-    // Auto-refresh every 60 seconds to sync data across devices
+    // Auto-refresh every 5 minutes
     const intervalId = setInterval(() => {
       loadDashboard();
-    }, 60000);
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        loadDashboard();
-      }
-    };
-
-    const handleFocus = () => {
-      loadDashboard();
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("focus", handleFocus);
+    }, 300000);
 
     return () => {
       clearInterval(intervalId);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("focus", handleFocus);
     };
   }, []);
 

@@ -9,31 +9,14 @@ const TenantHistory = () => {
   useEffect(() => {
     loadHistory();
 
-    // Auto-refresh every 60 seconds to sync data across devices
+    // Auto-refresh every 5 minutes
     const intervalId = setInterval(() => {
       loadHistory();
-    }, 60000);
-
-    // Refresh when tab/app becomes visible again
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        loadHistory();
-      }
-    };
-
-    // Refresh when window gains focus
-    const handleFocus = () => {
-      loadHistory();
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
+    }, 300000);
 
     // Cleanup listeners
     return () => {
       clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 

@@ -54,38 +54,14 @@ const RentHistory = () => {
       const monthKey = `${selectedYear}-${selectedMonth}`;
       loadRentHistory(monthKey);
 
-      // Auto-refresh every 60 seconds to sync data across devices
+      // Auto-refresh every 5 minutes
       const intervalId = setInterval(() => {
         loadRentHistory(monthKey);
-      }, 60000);
-
-      // Refresh when tab/app becomes visible again
-      const handleVisibilityChange = () => {
-        if (!document.hidden) {
-          loadRentHistory(monthKey);
-        }
-      };
-
-      // Refresh when window gains focus
-      const handleFocus = () => {
-        loadRentHistory(monthKey);
-      };
-      
-      // Refresh on online event (network reconnection)
-      const handleOnline = () => {
-        loadRentHistory(monthKey);
-      };
-
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      window.addEventListener('focus', handleFocus);
-      window.addEventListener('online', handleOnline);
+      }, 300000);
 
       // Cleanup listeners
       return () => {
         clearInterval(intervalId);
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        window.removeEventListener('focus', handleFocus);
-        window.removeEventListener('online', handleOnline);
       };
     }
   }, [selectedMonth, selectedYear]);
