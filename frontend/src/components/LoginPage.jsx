@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const apiBase = import.meta.env.VITE_API_URL || "/api";
+const apiBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || "/api";
 
 const LoginPage = ({ onLoginSuccess }) => {
   const [username, setUsername] = useState("");

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const RentContext = createContext(null);
 
-const apiBase = import.meta.env.VITE_API_URL || "/api";
+const apiBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || "/api";
 const AUTH_TOKEN_KEY = "authToken";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
