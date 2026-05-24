@@ -97,10 +97,13 @@ if (NODE_ENV === "production") {
   }
 
   console.log(`Serving static files from: ${frontendBuildPath}`);
+  let isFrontendReady = false;
   if (!fs.existsSync(frontendBuildPath)) {
     console.warn(`⚠️  WARNING: Frontend dist folder not found at any of: ${candidatePaths.join(", ")}`);
+    isFrontendReady = false;
   } else {
     console.log(`✓ Frontend dist folder found`);
+    isFrontendReady = true;
   }
 
   app.use(express.static(frontendBuildPath, {
@@ -156,12 +159,24 @@ if (NODE_ENV === "production") {
     }
   });
   
+  // Health endpoint for platform checks
+  app.get('/health', (req, res) => {
+    const ok = isDbReady && (NODE_ENV !== 'production' || isFrontendReady);
+    return res.status(ok ? 200 : 503).json({ db: !!isDbReady, frontend: !!isFrontendReady });
+  });
+
   // Fallback route for React Router (never for direct file requests like .js/.css)
   app.get("*", (req, res) => {
     if (path.extname(req.path)) {
       return res.status(404).type("text/plain").send("Not Found");
     }
 
+    // If frontend isn't ready in production, return Service Unavailable so the platform can retry
+    if (NODE_ENV === 'production' && !isFrontendReady) {
+      return res.status(503).json({ message: 'Service starting: frontend build not ready' });
+    }
+
+    // Ensure index.html is never cached by browsers so clients always fetch the latest asset references
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
