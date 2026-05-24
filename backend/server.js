@@ -106,6 +106,33 @@ if (NODE_ENV === "production") {
     isFrontendReady = true;
   }
 
+  const sendFrontendFile = (filePath, res, next) => {
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).type("text/plain").send("Not Found");
+    }
+
+    return res.sendFile(filePath, (err) => {
+      if (err) {
+        console.error(`Error sending file ${filePath}:`, err && (err.stack || err.message || err));
+        if (!res.headersSent) {
+          res.status(err.statusCode || 500).type("text/plain").send(err.statusCode === 404 ? "Not Found" : "Internal Server Error");
+        }
+      }
+    });
+  };
+
+  app.get("/assets/:assetName", (req, res) => {
+    const assetPath = path.join(frontendBuildPath, "assets", req.params.assetName);
+    return sendFrontendFile(assetPath, res);
+  });
+
+  app.get(["/manifest.json", "/sw.js", "/icon-192.png", "/icon-512.png", "/favicon.ico"], (req, res) => {
+    const fileName = req.path === "/favicon.ico" ? "icon-192.png" : req.path.replace(/^\//, "");
+    const filePath = path.join(frontendBuildPath, fileName);
+    return sendFrontendFile(filePath, res);
+  });
+
+  // Fallback static middleware for any other build files if needed.
   app.use(express.static(frontendBuildPath, {
     maxAge: "1y",
     etag: false,
@@ -193,7 +220,12 @@ if (NODE_ENV === "production") {
 app.use((err, req, res, next) => {
   console.error("Unhandled error:", err && (err.stack || err.message || err));
   if (!res.headersSent) {
-    res.status(500).json({ message: "Internal Server Error" });
+      if (req.path && req.path.startsWith("/assets/")) {
+        res.status(500).type("text/plain").send("Internal Server Error");
+        return;
+      }
+
+      res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
