@@ -4,8 +4,17 @@ services:
     env: node
     plan: free
     branch: main
-    # Build frontend, copy built `dist` into backend/frontend-dist, then install backend deps
-    buildCommand: npm ci --include=dev --prefix frontend && npm run build --prefix frontend && cp -R frontend/dist backend/frontend-dist && npm ci --prefix backend
+    # Build frontend, copy built `dist` into backend/frontend-dist atomically, then install backend deps
+    # Use a temporary directory and move it into place to avoid partial files being served during deploy.
+    buildCommand: |
+      npm ci --include=dev --prefix frontend && \
+      npm run build --prefix frontend && \
+      rm -rf backend/frontend-dist.tmp || true && \
+      mkdir -p backend/frontend-dist.tmp && \
+      cp -R frontend/dist/. backend/frontend-dist.tmp/ && \
+      rm -rf backend/frontend-dist && \
+      mv backend/frontend-dist.tmp backend/frontend-dist && \
+      npm ci --prefix backend
     startCommand: npm start --prefix backend
     envVars:
       - key: NODE_ENV
