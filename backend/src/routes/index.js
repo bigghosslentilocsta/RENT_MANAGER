@@ -6,6 +6,8 @@ const Payment = require("../models/Payment");
 const DepositPayment = require("../models/DepositPayment");
 const { ensureFlatsSeeded } = require("../config/db");
 const { issueAuthToken, validateLogin } = require("../config/auth");
+const { placeReminderCall } = require("../utils/voiceCallAgent");
+const CallAttempt = require("../models/CallAttempt");
 
 const router = express.Router();
 const flatOrder = ["g1", "101", "201", "202", "203", "301", "302", "303", "401", "402", "403"];
@@ -16,6 +18,22 @@ const flatOrderMap = flatOrder.reduce((acc, value, index) => {
 
 const getMonthKey = (date = new Date()) => {
   return date.toISOString().slice(0, 7);
+};
+
+const derivePaymentState = (payment = {}) => {
+  const amount = Number(payment.amount || 0);
+  const amountPaid = Number(payment.amountPaid || 0);
+  const remainingAmount = Math.max(0, amount - amountPaid);
+
+  if (amountPaid >= amount && amount > 0) {
+    return { amountPaid: amount, remainingAmount: 0, paymentStatus: "Paid" };
+  }
+
+  if (amountPaid > 0) {
+    return { amountPaid, remainingAmount, paymentStatus: "Partially Paid" };
+  }
+
+  return { amountPaid: 0, remainingAmount: amount, paymentStatus: "Pending" };
 };
 
 const isValidMonthKey = (value) => /^\d{4}-\d{2}$/.test(String(value || ""));
@@ -74,6 +92,8 @@ const upsertPaymentForTenantMonth = async ({ tenant, flat, monthKey, amount, sta
   const update = {
     flatId: flat._id,
     amount,
+    amountPaid: status === "Paid" ? amount : 0,
+    partialPayments: status === "Paid" ? [{ amount, date: paidDate || new Date(), note: "Initial payment" }] : [],
     status,
     date: status === "Paid" ? (paidDate || new Date()) : null
   };
@@ -123,6 +143,8 @@ const ensureCurrentMonthPayments = async (tenants, monthKey) => {
       tenantId: tenant._id,
       flatId: tenant.flatId,
       amount: tenant.agreedRent,
+      amountPaid: 0,
+      partialPayments: [],
       month: monthKey,
       status: "Pending",
       date: null
@@ -182,16 +204,21 @@ router.get("/dashboard", async (req, res) => {
           paymentStatus: null,
           paymentId: null,
           paymentAmount: null,
+          amountPaid: 0,
+          remainingAmount: null,
           month: monthKey
         };
       }
 
       const payment = paymentByTenant[tenant._id.toString()];
+      const paymentState = derivePaymentState(payment || { amount: tenant.agreedRent, amountPaid: 0 });
       return {
         ...flat,
-        paymentStatus: payment ? payment.status : "Pending",
+        paymentStatus: payment ? paymentState.paymentStatus : "Pending",
         paymentId: payment ? payment._id : null,
         paymentAmount: payment ? payment.amount : tenant.agreedRent,
+        amountPaid: payment ? paymentState.amountPaid : 0,
+        remainingAmount: payment ? paymentState.remainingAmount : tenant.agreedRent,
         month: monthKey
       };
     });
@@ -343,9 +370,86 @@ router.patch("/payments/:id", async (req, res) => {
       return res.status(404).json({ message: "Payment not found" });
     }
 
-    const nextStatus = payment.status === "Paid" ? "Pending" : "Paid";
-    payment.status = nextStatus;
-    payment.date = nextStatus === "Paid" ? new Date() : null;
+    const { amount, amountPaid, status, paidDate, note } = req.body || {};
+    const hasAmountUpdate = amount !== undefined && amount !== null && amount !== "";
+    const hasAmountPaidUpdate = amountPaid !== undefined && amountPaid !== null && amountPaid !== "";
+    const hasStatusUpdate = status !== undefined && status !== null && status !== "";
+    const shouldToggleStatus = !hasAmountUpdate && !hasAmountPaidUpdate && !hasStatusUpdate;
+
+    if (hasAmountUpdate) {
+      const numericAmount = Number(amount);
+      if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+        return res.status(400).json({ message: "Payment amount must be greater than 0" });
+      }
+      payment.amount = numericAmount;
+    }
+
+    if (hasAmountPaidUpdate) {
+      const numericAmountPaid = Number(amountPaid);
+      if (!Number.isFinite(numericAmountPaid) || numericAmountPaid <= 0) {
+        return res.status(400).json({ message: "Paid amount must be greater than 0" });
+      }
+
+      const paymentDate = paidDate ? parseDateInput(paidDate) : new Date();
+      if (paidDate && !paymentDate) {
+        return res.status(400).json({ message: "Invalid paidDate. Use YYYY-MM-DD" });
+      }
+
+      payment.amountPaid = Number(payment.amountPaid || 0) + numericAmountPaid;
+      payment.partialPayments = payment.partialPayments || [];
+      payment.partialPayments.push({
+        amount: numericAmountPaid,
+        date: paymentDate,
+        note: note || ""
+      });
+      payment.date = payment.date || paymentDate;
+    }
+
+    if (hasStatusUpdate) {
+      if (!['Paid', 'Partially Paid', 'Pending'].includes(status)) {
+        return res.status(400).json({ message: "Invalid payment status" });
+      }
+
+      payment.status = status;
+      if (status === "Paid") {
+        payment.amountPaid = payment.amount;
+        payment.date = payment.date || new Date();
+      }
+      if (status === "Pending") {
+        payment.amountPaid = 0;
+        payment.partialPayments = [];
+        payment.date = null;
+      }
+    } else if (shouldToggleStatus) {
+      if (payment.status === "Paid") {
+        payment.amountPaid = 0;
+        payment.partialPayments = [];
+        payment.status = "Pending";
+        payment.date = null;
+      } else {
+        payment.amountPaid = payment.amount;
+        payment.partialPayments = [{ amount: payment.amount, date: new Date(), note: "Marked paid" }];
+        payment.status = "Paid";
+        payment.date = payment.date || new Date();
+      }
+    }
+
+    const paymentState = derivePaymentState(payment);
+    payment.amountPaid = paymentState.amountPaid;
+    payment.status = hasStatusUpdate ? payment.status : paymentState.paymentStatus;
+    if (shouldToggleStatus && payment.status === "Pending") {
+      payment.status = "Pending";
+    }
+    if (payment.amountPaid === 0 && payment.status !== "Pending") {
+      payment.status = "Pending";
+    }
+    if (payment.amountPaid >= payment.amount) {
+      payment.status = "Paid";
+      payment.date = payment.date || new Date();
+    } else if (payment.amountPaid > 0 && payment.status !== "Pending") {
+      payment.status = "Partially Paid";
+    }
+
     await payment.save();
 
     res.json({ payment });
@@ -393,6 +497,103 @@ router.patch("/payments/:id/date", async (req, res) => {
     return res.json({ payment });
   } catch (error) {
     return res.status(500).json({ message: "Unable to update paid date." });
+  }
+});
+
+router.post("/tenants/:tenantId/call-reminder", async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(tenantId)) {
+      return res.status(400).json({ message: "Invalid tenant id" });
+    }
+
+    const tenant = await Tenant.findById(tenantId).populate("flatId");
+    if (!tenant || tenant.status !== "Active") {
+      return res.status(404).json({ message: "Active tenant not found" });
+    }
+
+    const monthKey = getMonthKey();
+    const payment = await Payment.findOne({ tenantId: tenant._id, month: monthKey });
+    if (!payment) {
+      return res.status(404).json({ message: "Current month payment not found" });
+    }
+
+    if (payment.status === "Paid") {
+      return res.status(409).json({ message: "Rent is already marked as paid" });
+    }
+
+    const paymentState = derivePaymentState(payment);
+
+    // Persist an initial call attempt record
+    const callAttempt = await CallAttempt.create({
+      tenantId: tenant._id,
+      paymentId: payment._id,
+      phoneNumber: tenant.phone,
+      status: "initiated",
+      metadata: {
+        month: payment.month
+      }
+    });
+
+    const call = await placeReminderCall({
+      toPhone: tenant.phone,
+      tenantName: tenant.name,
+      flatNumber: tenant.flatId?.number || "",
+      amount: payment.amount,
+      variables: {
+        FLAT_NUMBER: String(tenant.flatId?.number || ""),
+        AMOUNT_DUE: String(payment.amount || 0),
+        AMOUNT_PAID: String(paymentState.amountPaid || 0),
+        AMOUNT_REMAINING: String(paymentState.remainingAmount || 0),
+        CALL_ATTEMPT_ID: String(callAttempt._id)
+      }
+    });
+
+    // Update call attempt with provider info
+    callAttempt.providerCallId = call.id || call.sid || String(call.callId || "");
+    callAttempt.status = call.status || "initiated";
+    await callAttempt.save();
+
+    return res.json({ message: "Call initiated", callAttemptId: callAttempt._id, providerCallId: callAttempt.providerCallId, status: callAttempt.status });
+  } catch (error) {
+    console.error("Call reminder error:", error);
+    const statusCode = Number(error.statusCode) || 500;
+    return res.status(statusCode).json({ message: error.message || "Unable to place reminder call" });
+  }
+});
+
+// Authenticated test call helper for manual verification without a tenant record.
+router.post("/test-call", async (req, res) => {
+  try {
+    const phoneNumber = String(req.body?.phoneNumber || "9000495888").trim();
+    const tenantName = String(req.body?.tenantName || "Test Tenant").trim();
+    const flatNumber = String(req.body?.flatNumber || "TEST").trim();
+    const amount = Number(req.body?.amount || 0);
+
+    const call = await placeReminderCall({
+      toPhone: phoneNumber,
+      tenantName,
+      flatNumber,
+      amount,
+      variables: {
+        FLAT_NUMBER: flatNumber,
+        AMOUNT_DUE: String(amount),
+        AMOUNT_PAID: "0",
+        AMOUNT_REMAINING: String(amount),
+        CALL_ATTEMPT_ID: "test-call"
+      }
+    });
+
+    return res.json({
+      message: "Test call initiated",
+      phoneNumber,
+      providerCallId: call.id || call.sid || String(call.callId || ""),
+      status: call.status || "initiated"
+    });
+  } catch (error) {
+    console.error("Test call error:", error);
+    const statusCode = Number(error.statusCode) || 500;
+    return res.status(statusCode).json({ message: error.message || "Unable to place test call" });
   }
 });
 
@@ -495,6 +696,9 @@ router.patch("/tenants/:tenantId/rent", async (req, res) => {
       return res.status(400).json({ message: "Rent must be a number greater than 0" });
     }
 
+    const effectiveMonthKey = req.body?.effectiveMonthKey;
+    const monthKey = effectiveMonthKey && /^\d{4}-\d{2}$/.test(effectiveMonthKey) ? effectiveMonthKey : getMonthKey();
+
     const tenant = await Tenant.findById(tenantId);
     if (!tenant) {
       return res.status(404).json({ message: "Tenant not found" });
@@ -507,11 +711,10 @@ router.patch("/tenants/:tenantId/rent", async (req, res) => {
     tenant.agreedRent = numericRent;
     await tenant.save();
 
-    const currentMonthKey = getMonthKey();
     await Payment.updateMany(
       {
         tenantId: tenant._id,
-        month: { $gte: currentMonthKey }
+        month: { $gte: monthKey }
       },
       {
         $set: { amount: numericRent }
@@ -569,13 +772,18 @@ router.get("/rent-history", async (req, res) => {
     
     const records = validPayments.map((payment) => ({
       _id: payment._id,
+      tenantId: payment.tenantId?._id || payment.tenantId,
+      tenantStatus: payment.tenantId?.status || "Unknown",
       flatNumber: payment.flatId?.number || "Unknown",
       tenantName: payment.tenantId?.name || "Unknown",
       tenantPhone: payment.tenantId?.phone || "-",
       amount: payment.amount,
-      status: payment.status,
+      amountPaid: Number(payment.amountPaid || 0),
+      remainingAmount: Math.max(0, Number(payment.amount || 0) - Number(payment.amountPaid || 0)),
+      status: derivePaymentState(payment).paymentStatus,
       month: payment.month,
       paidDate: payment.date,
+      partialPayments: payment.partialPayments || [],
       leaseStart: payment.tenantId?.leaseStart
     }));
 
@@ -670,6 +878,8 @@ router.post("/sync/sheet-actions", async (req, res) => {
               $setOnInsert: {
                 flatId: flat._id,
                 amount: agreedRent,
+                amountPaid: 0,
+                partialPayments: [],
                 status: "Pending",
                 date: null
               }
@@ -719,6 +929,8 @@ router.post("/sync/sheet-actions", async (req, res) => {
                 $set: {
                   flatId: flatIdForPayment,
                   amount: tenant.agreedRent,
+                  amountPaid: tenant.agreedRent,
+                  partialPayments: [{ amount: tenant.agreedRent, date: vacatingAt, note: "Final settlement" }],
                   status: "Paid",
                   date: vacatingAt
                 }
@@ -906,4 +1118,79 @@ router.post("/sync/sheet-actions", async (req, res) => {
   }
 });
 
+// Admin: List call attempts (authenticated)
+router.get("/call-attempts", async (req, res) => {
+  try {
+    const { tenantId, paymentId, status, limit = 50, page = 0 } = req.query || {};
+    const q = {};
+    if (tenantId && mongoose.Types.ObjectId.isValid(tenantId)) q.tenantId = tenantId;
+    if (paymentId && mongoose.Types.ObjectId.isValid(paymentId)) q.paymentId = paymentId;
+    if (status) q.status = String(status);
+
+    const numericLimit = Math.min(200, Math.max(1, Number(limit) || 50));
+    const numericPage = Math.max(0, Number(page) || 0);
+
+    const total = await CallAttempt.countDocuments(q);
+    const items = await CallAttempt.find(q)
+      .sort({ createdAt: -1 })
+      .skip(numericPage * numericLimit)
+      .limit(numericLimit)
+      .populate("tenantId", "name phone status flatId")
+      .populate("paymentId", "month amount status")
+      .lean();
+
+    return res.json({ total, page: numericPage, limit: numericLimit, items });
+  } catch (error) {
+    console.error("List call attempts error:", error);
+    return res.status(500).json({ message: "Unable to list call attempts" });
+  }
+});
+
 module.exports = router;
+
+// Vapi webhook endpoint to receive call status updates and events
+router.post("/webhook/vapi", async (req, res) => {
+  try {
+    const payload = req.body || {};
+
+    // Try common locations for provider call id and attempt id
+    const providerCallId = payload.id || (payload.call && payload.call.id) || payload.callId || payload.sid || payload.callSid || (payload.data && payload.data.id) || null;
+    const attemptId = (payload.variables && payload.variables.CALL_ATTEMPT_ID) || (payload.metadata && payload.metadata.CALL_ATTEMPT_ID) || (payload.call && payload.call.variables && payload.call.variables.CALL_ATTEMPT_ID) || null;
+    const status = payload.status || payload.event || (payload.call && payload.call.status) || payload.state || "unknown";
+
+    let callAttempt = null;
+    if (attemptId && mongoose.Types.ObjectId.isValid(attemptId)) {
+      callAttempt = await CallAttempt.findById(attemptId);
+    }
+
+    if (!callAttempt && providerCallId) {
+      callAttempt = await CallAttempt.findOne({ providerCallId: providerCallId });
+    }
+
+    const event = { payload, receivedAt: new Date() };
+
+    if (!callAttempt) {
+      const phoneNumber = payload.customer?.number || payload.customer?.phone || payload.from || "";
+      callAttempt = await CallAttempt.create({
+        phoneNumber,
+        providerCallId: providerCallId || "",
+        status: status || "unknown",
+        metadata: { source: "vapi-webhook" },
+        events: [event]
+      });
+      return res.json({ ok: true, created: true, id: callAttempt._id });
+    }
+
+    callAttempt.status = status || callAttempt.status;
+    callAttempt.providerCallId = callAttempt.providerCallId || providerCallId;
+    callAttempt.events = callAttempt.events || [];
+    callAttempt.events.push(event);
+    callAttempt.metadata = callAttempt.metadata || {};
+    await callAttempt.save();
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("Vapi webhook error:", error);
+    return res.status(500).json({ ok: false });
+  }
+});

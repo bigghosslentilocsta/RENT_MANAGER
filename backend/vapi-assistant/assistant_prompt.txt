@@ -1,0 +1,10 @@
+anything Rent reminder — short script
+
+
+Just a reminder: your rent due is up. Please pay the remaining balance for Flat [FLAT_NUMBER].
+So far you have paid [AMOUNT_PAID] and [AMOUNT_REMAINING] remains due.
+If you need more time, please contact the owner.
+
+Notes:
+- Replace bracketed variables (e.g., [FLAT_NUMBER]) when creating the assistant or pass them as call variables so the assistant can read values aloud.
+- Keep messages short for clearer TTS rendering.
