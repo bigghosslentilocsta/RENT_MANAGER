@@ -8,20 +8,24 @@ const translations = {
     tenantName: "Tenant Name",
     rentPaid: "Rent Paid",
     pending: "Pending",
+    partiallyPaid: "Partially Paid",
     vacant: "Vacant",
     history: "History",
     backup: "Backup",
-    notifyViaWhatsApp: "Notify via WhatsApp"
+    notifyViaWhatsApp: "Notify via WhatsApp",
+    callTenant: "Call Tenant"
   },
   te: {
     flatNumber: "ఫ్లాట్ నంబర్",
     tenantName: "అద్దెదారు పేరు",
     rentPaid: "అద్దె చెల్లించబడింది",
     pending: "పెండింగ్",
+    partiallyPaid: "పాక్షికంగా చెల్లించారు",
     vacant: "ఖాళీ",
     history: "చరిత్ర",
     backup: "బ్యాకప్",
-    notifyViaWhatsApp: "వాట్సాప్ ద్వారా తెలియజేయండి"
+    notifyViaWhatsApp: "వాట్సాప్ ద్వారా తెలియజేయండి",
+    callTenant: "కాల్ చేయండి"
   }
 };
 

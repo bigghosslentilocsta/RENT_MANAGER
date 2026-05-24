@@ -4,7 +4,8 @@ services:
     env: node
     plan: free
     branch: main
-    buildCommand: npm ci --include=dev --prefix frontend && npm run build --prefix frontend && npm ci --prefix backend
+    # Build frontend, copy built `dist` into backend/frontend-dist, then install backend deps
+    buildCommand: npm ci --include=dev --prefix frontend && npm run build --prefix frontend && cp -R frontend/dist backend/frontend-dist && npm ci --prefix backend
     startCommand: npm start --prefix backend
     envVars:
       - key: NODE_ENV

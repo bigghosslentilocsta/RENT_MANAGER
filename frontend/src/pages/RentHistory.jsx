@@ -3,12 +3,22 @@ import { useRent } from "../context/RentContext.jsx";
 import { useTranslation } from "../context/TranslationContext.jsx";
 
 const RentHistory = () => {
-  const { rentHistory, loadRentHistory, updatePaymentDate, formatCurrency, error, loading } = useRent();
+  const {
+    rentHistory,
+    loadRentHistory,
+    updatePaymentDate,
+    updatePayment,
+    formatCurrency,
+    error,
+    loading
+  } = useRent();
   const { t } = useTranslation();
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
-  const [editingPaymentId, setEditingPaymentId] = useState("");
+  const [editingPaidDateId, setEditingPaidDateId] = useState("");
   const [editingPaidDate, setEditingPaidDate] = useState("");
+  const [editingPaymentId, setEditingPaymentId] = useState("");
+  const [editingAmount, setEditingAmount] = useState("");
 
   const getDateInputValue = (dateValue) => {
     if (!dateValue) return "";
@@ -20,12 +30,12 @@ const RentHistory = () => {
   };
 
   const beginEditPaidDate = (record) => {
-    setEditingPaymentId(record._id);
+    setEditingPaidDateId(record._id);
     setEditingPaidDate(getDateInputValue(record.paidDate));
   };
 
   const cancelEditPaidDate = () => {
-    setEditingPaymentId("");
+    setEditingPaidDateId("");
     setEditingPaidDate("");
   };
 
@@ -39,7 +49,26 @@ const RentHistory = () => {
     cancelEditPaidDate();
   };
 
-  // Initialize with current month/year
+  const beginEditPayment = (record) => {
+    setEditingPaymentId(record._id);
+    setEditingAmount("");
+  };
+
+  const cancelEditPayment = () => {
+    setEditingPaymentId("");
+    setEditingAmount("");
+  };
+
+  const savePayment = async (record) => {
+    if (!editingAmount || Number(editingAmount) <= 0 || !selectedMonth || !selectedYear) {
+      return;
+    }
+
+    const monthKey = `${selectedYear}-${selectedMonth}`;
+    await updatePayment(record._id, { amountPaid: Number(editingAmount) }, monthKey);
+    cancelEditPayment();
+  };
+
   useEffect(() => {
     const now = new Date();
     const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -48,18 +77,15 @@ const RentHistory = () => {
     setSelectedYear(year);
   }, []);
 
-  // Load rent history when month/year changes, with auto-refresh
   useEffect(() => {
     if (selectedMonth && selectedYear) {
       const monthKey = `${selectedYear}-${selectedMonth}`;
       loadRentHistory(monthKey);
 
-      // Auto-refresh every 5 minutes
       const intervalId = setInterval(() => {
         loadRentHistory(monthKey);
       }, 300000);
 
-      // Cleanup listeners
       return () => {
         clearInterval(intervalId);
       };
@@ -69,7 +95,7 @@ const RentHistory = () => {
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const years = [];
-  for (let i = currentYear - 5; i <= currentYear + 1; i++) {
+  for (let i = currentYear - 5; i <= currentYear + 1; i += 1) {
     years.push(i);
   }
 
@@ -88,11 +114,23 @@ const RentHistory = () => {
     { value: "12", label: "December" }
   ];
 
-  const calculateTotalRent = () => rentHistory.reduce((sum, record) => sum + record.amount, 0);
-  const calculateTotalPaid = () =>
-    rentHistory.filter((r) => r.status === "Paid").reduce((sum, r) => sum + r.amount, 0);
-  const calculateTotalPending = () =>
-    rentHistory.filter((r) => r.status === "Pending").reduce((sum, r) => sum + r.amount, 0);
+  const calculateTotalDue = () => rentHistory.reduce((sum, record) => sum + Number(record.amount || 0), 0);
+  const calculateTotalReceived = () =>
+    rentHistory.reduce((sum, record) => sum + Number(record.amountPaid || 0), 0);
+  const calculateTotalRemaining = () =>
+    rentHistory.reduce((sum, record) => sum + Number(record.remainingAmount || 0), 0);
+
+  const getStatusLabel = (status) => {
+    if (status === "Partially Paid") return t("partiallyPaid");
+    if (status === "Paid") return t("rentPaid");
+    return t("pending");
+  };
+
+  const getStatusClassName = (status) => {
+    if (status === "Paid") return "border border-paid bg-paid/10 text-paid";
+    if (status === "Partially Paid") return "border border-amber-500 bg-amber-500/10 text-amber-700";
+    return "border border-pending bg-pending/10 text-pending";
+  };
 
   return (
     <section>
@@ -141,25 +179,23 @@ const RentHistory = () => {
 
       {error ? <p className="mb-4 text-sm text-pending">{error}</p> : null}
 
-      {/* Summary Cards */}
       <div className="mb-6 grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
         <div className="rounded-2xl sm:rounded-3xl border border-white/60 bg-white/80 p-4 sm:p-6 shadow-card backdrop-blur-xl">
           <p className="text-xs uppercase tracking-[0.2em] text-muted">Total Due</p>
-          <p className="mt-2 text-xl sm:text-2xl font-semibold">{formatCurrency(calculateTotalRent())}</p>
+          <p className="mt-2 text-xl sm:text-2xl font-semibold">{formatCurrency(calculateTotalDue())}</p>
         </div>
         <div className="rounded-2xl sm:rounded-3xl border border-white/60 bg-white/80 p-4 sm:p-6 shadow-card backdrop-blur-xl">
-          <p className="text-xs uppercase tracking-[0.2em] text-paid">Paid</p>
-          <p className="mt-2 text-xl sm:text-2xl font-semibold text-paid">{formatCurrency(calculateTotalPaid())}</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-paid">Received</p>
+          <p className="mt-2 text-xl sm:text-2xl font-semibold text-paid">{formatCurrency(calculateTotalReceived())}</p>
         </div>
         <div className="rounded-2xl sm:rounded-3xl border border-white/60 bg-white/80 p-4 sm:p-6 shadow-card backdrop-blur-xl">
-          <p className="text-xs uppercase tracking-[0.2em] text-pending">Pending</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-pending">Remaining Due</p>
           <p className="mt-2 text-xl sm:text-2xl font-semibold text-pending">
-            {formatCurrency(calculateTotalPending())}
+            {formatCurrency(calculateTotalRemaining())}
           </p>
         </div>
       </div>
 
-      {/* Rent Records Table - Desktop */}
       <div className="hidden md:block overflow-hidden rounded-3xl border border-white/60 bg-white/80 shadow-card backdrop-blur-xl">
         <table className="w-full border-collapse text-left text-sm">
           <thead className="bg-ink text-white">
@@ -167,45 +203,60 @@ const RentHistory = () => {
               <th className="px-5 py-3">{t("flatNumber")}</th>
               <th className="px-5 py-3">{t("tenantName")}</th>
               <th className="px-5 py-3">Phone</th>
-              <th className="px-5 py-3">Amount</th>
+              <th className="px-5 py-3">Total Due</th>
+              <th className="px-5 py-3">Paid</th>
+              <th className="px-5 py-3">Remaining</th>
               <th className="px-5 py-3">Status</th>
               <th className="px-5 py-3">Paid Date</th>
+              <th className="px-5 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="6" className="px-5 py-6 text-center text-muted">
+                <td colSpan="9" className="px-5 py-6 text-center text-muted">
                   Loading...
                 </td>
               </tr>
             ) : rentHistory.length === 0 ? (
               <tr>
-                <td colSpan="6" className="px-5 py-6 text-center text-muted">
+                <td colSpan="9" className="px-5 py-6 text-center text-muted">
                   No rent records for this month.
                 </td>
               </tr>
             ) : (
               rentHistory.map((record) => (
                 <tr key={record._id} className="border-t border-ink/10">
-                  <td className="px-5 py-3 font-semibold">{t("flatNumber")}: {record.flatNumber}</td>
+                  <td className="px-5 py-3 font-semibold">{record.flatNumber}</td>
                   <td className="px-5 py-3">{record.tenantName}</td>
                   <td className="px-5 py-3 text-muted">{record.tenantPhone}</td>
                   <td className="px-5 py-3 font-semibold">{formatCurrency(record.amount)}</td>
+                  <td className="px-5 py-3 font-semibold">
+                    {editingPaymentId === record._id ? (
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editingAmount}
+                        onChange={(event) => setEditingAmount(event.target.value)}
+                        placeholder="Amount received"
+                        className="w-32 rounded-lg border border-ink/20 bg-white px-2 py-1 text-xs font-medium text-ink"
+                      />
+                    ) : (
+                      formatCurrency(Number(record.amountPaid || 0))
+                    )}
+                  </td>
+                  <td className="px-5 py-3 font-semibold text-pending">
+                    {formatCurrency(Number(record.remainingAmount || 0))}
+                  </td>
                   <td className="px-5 py-3">
-                    <span
-                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${
-                        record.status === "Paid"
-                          ? "border border-paid bg-paid/10 text-paid"
-                          : "border border-pending bg-pending/10 text-pending"
-                      }`}
-                    >
-                      {record.status === "Paid" ? t("rentPaid") : t("pending")}
+                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${getStatusClassName(record.status)}`}>
+                      {getStatusLabel(record.status)}
                     </span>
                   </td>
                   <td className="px-5 py-3 text-muted">
                     {record.status === "Paid" ? (
-                      editingPaymentId === record._id ? (
+                      editingPaidDateId === record._id ? (
                         <div className="flex flex-wrap items-center gap-2">
                           <input
                             type="date"
@@ -247,6 +298,37 @@ const RentHistory = () => {
                       "-"
                     )}
                   </td>
+                  <td className="px-5 py-3">
+                    {editingPaymentId === record._id ? (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => savePayment(record)}
+                          disabled={loading || !editingAmount}
+                          className="rounded-full bg-ink px-3 py-1 text-xs font-semibold text-white"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEditPayment}
+                          disabled={loading}
+                          className="rounded-full border border-ink/20 px-3 py-1 text-xs font-semibold text-ink"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => beginEditPayment(record)}
+                        disabled={loading}
+                        className="rounded-full border border-ink/20 px-3 py-1 text-xs font-semibold text-ink"
+                      >
+                        Add Payment
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))
             )}
@@ -254,7 +336,6 @@ const RentHistory = () => {
         </table>
       </div>
 
-      {/* Rent Records - Mobile Cards */}
       <div className="md:hidden space-y-3">
         {loading ? (
           <div className="rounded-2xl border border-white/60 bg-white/80 p-6 text-center shadow-card">
@@ -273,25 +354,45 @@ const RentHistory = () => {
                   <p className="mt-1 text-base font-semibold">{record.tenantName}</p>
                   <p className="mt-0.5 text-xs text-muted">{record.tenantPhone}</p>
                 </div>
-                <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.15em] ${
-                    record.status === "Paid"
-                      ? "border border-paid bg-paid/10 text-paid"
-                      : "border border-pending bg-pending/10 text-pending"
-                  }`}
-                >
-                  {record.status === "Paid" ? t("rentPaid") : t("pending")}
+                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.15em] ${getStatusClassName(record.status)}`}>
+                  {getStatusLabel(record.status)}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-3 pt-3 border-t border-ink/10">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.1em] text-muted">Amount</p>
+                  <p className="text-xs uppercase tracking-[0.1em] text-muted">Total Due</p>
                   <p className="mt-1 text-sm font-semibold">{formatCurrency(record.amount)}</p>
                 </div>
                 <div>
+                  <p className="text-xs uppercase tracking-[0.1em] text-muted">Paid</p>
+                  {editingPaymentId === record._id ? (
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editingAmount}
+                      onChange={(event) => setEditingAmount(event.target.value)}
+                      placeholder="Amount received"
+                      className="mt-1 w-full rounded-lg border border-ink/20 bg-white px-2 py-1 text-sm font-medium text-ink"
+                    />
+                  ) : (
+                    <p className="mt-1 text-sm font-semibold">{formatCurrency(Number(record.amountPaid || 0))}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.1em] text-muted">Remaining</p>
+                  <p className="mt-1 text-sm font-semibold text-pending">{formatCurrency(Number(record.remainingAmount || 0))}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.1em] text-muted">Status</p>
+                  <p className={`mt-1 text-sm font-semibold ${record.status === "Paid" ? "text-paid" : record.status === "Partially Paid" ? "text-amber-700" : "text-pending"}`}>
+                    {getStatusLabel(record.status)}
+                  </p>
+                </div>
+                <div className="col-span-2">
                   <p className="text-xs uppercase tracking-[0.1em] text-muted">Paid Date</p>
                   {record.status === "Paid" ? (
-                    editingPaymentId === record._id ? (
+                    editingPaidDateId === record._id ? (
                       <div className="flex flex-col gap-1.5 mt-1">
                         <input
                           type="date"
@@ -335,6 +436,37 @@ const RentHistory = () => {
                     <p className="mt-1 text-sm text-muted">-</p>
                   )}
                 </div>
+              </div>
+              <div className="mt-4 flex gap-2">
+                {editingPaymentId === record._id ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => savePayment(record)}
+                      disabled={loading || !editingAmount}
+                      className="rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white"
+                    >
+                      Save Payment
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEditPayment}
+                      disabled={loading}
+                      className="rounded-full border border-ink/20 px-3 py-1.5 text-xs font-semibold text-ink"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => beginEditPayment(record)}
+                    disabled={loading}
+                    className="rounded-full border border-ink/20 px-3 py-1.5 text-xs font-semibold text-ink"
+                  >
+                    Add Payment
+                  </button>
+                )}
               </div>
             </div>
           ))

@@ -187,14 +187,14 @@ export const RentProvider = ({ children }) => {
     }
   };
 
-  const updateTenantRent = async (tenantId, agreedRent) => {
+  const updateTenantRent = async (tenantId, agreedRent, effectiveMonthKey = month) => {
     setLoading(true);
     setError("");
     try {
       const response = await apiFetch(`/tenants/${tenantId}/rent`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agreedRent })
+        body: JSON.stringify({ agreedRent, effectiveMonthKey })
       });
       if (!response.ok) {
         const message = await getErrorMessage(response, "Unable to update tenant rent.");
@@ -208,7 +208,7 @@ export const RentProvider = ({ children }) => {
           ? { ...prev.tenant, agreedRent }
           : prev.tenant,
         payments: (prev.payments || []).map((payment) => {
-          if (payment.month >= month) {
+          if (payment.month >= effectiveMonthKey) {
             return { ...payment, amount: agreedRent };
           }
           return payment;
@@ -301,6 +301,30 @@ export const RentProvider = ({ children }) => {
     }
   };
 
+  const updatePayment = async (paymentId, updates, monthKey) => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await apiFetch(`/payments/${paymentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates)
+      });
+      if (!response.ok) {
+        const message = await getErrorMessage(response, "Payment update failed.");
+        throw new Error(message);
+      }
+      if (monthKey) {
+        await loadRentHistory(monthKey);
+      }
+    } catch (err) {
+      setError(err.message || "Payment update failed.");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadRentHistory = async (monthKey) => {
     setLoading(true);
     setError("");
@@ -340,6 +364,28 @@ export const RentProvider = ({ children }) => {
     }
   };
 
+  const triggerCallReminder = async (tenantId) => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await apiFetch(`/tenants/${tenantId}/call-reminder`, {
+        method: "POST"
+      });
+
+      if (!response.ok) {
+        const message = await getErrorMessage(response, "Unable to initiate reminder call.");
+        throw new Error(message);
+      }
+
+      return response.json();
+    } catch (err) {
+      setError(err.message || "Unable to initiate reminder call.");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadDashboard();
 
@@ -367,11 +413,13 @@ export const RentProvider = ({ children }) => {
       loadHistory,
       loadRentHistory,
       updatePaymentDate,
+      triggerCallReminder,
       loadTenantHistory,
       clearTenantHistory,
       addDepositPayment,
       deleteDepositPayment,
       updateTenantRent,
+      updatePayment,
       moveIn,
       vacate,
       togglePayment

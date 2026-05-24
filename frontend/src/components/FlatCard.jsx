@@ -1,4 +1,4 @@
-import { CheckCircle2, DoorOpen, UserMinus2 } from "lucide-react";
+import { CheckCircle2, DoorOpen, PhoneCall, UserMinus2 } from "lucide-react";
 import { useState } from "react";
 import { useRent } from "../context/RentContext.jsx";
 import { useTranslation } from "../context/TranslationContext.jsx";
@@ -6,6 +6,7 @@ import ConfirmationDialog from "./ConfirmationDialog.jsx";
 
 const statusStyles = {
   Paid: "border-paid bg-paid/10 text-paid",
+  "Partially Paid": "border-amber-500 bg-amber-500/10 text-amber-700",
   Pending: "border-pending bg-pending/10 text-pending"
 };
 
@@ -38,12 +39,15 @@ const normalizePhoneNumber = (rawPhone = "") => {
 };
 
 const FlatCard = ({ flat, onAddTenant, onViewHistory }) => {
-  const { formatCurrency, togglePayment, vacate, loading } = useRent();
+  const { formatCurrency, togglePayment, triggerCallReminder, vacate, loading } = useRent();
   const { t } = useTranslation();
   const [dialogOpen, setDialogOpen] = useState(null);
   const [dialogLoading, setDialogLoading] = useState(false);
+  const [callLoading, setCallLoading] = useState(false);
   const tenant = flat.currentTenant;
   const dueDate = tenant ? getDueDate(tenant.leaseStart) : null;
+  const remainingAmount = Number(flat.remainingAmount ?? 0);
+  const paidAmount = Number(flat.amountPaid ?? 0);
 
   const sendWhatsAppReminder = (tenantData) => {
     const normalizedPhone = normalizePhoneNumber(tenantData?.phone);
@@ -91,6 +95,23 @@ const FlatCard = ({ flat, onAddTenant, onViewHistory }) => {
     }
   };
 
+  const handleCallTenant = async (event) => {
+    event.stopPropagation();
+    if (!tenant?._id) {
+      return;
+    }
+
+    setCallLoading(true);
+    try {
+      await triggerCallReminder(tenant._id);
+      window.alert(`Call started for ${tenant.name}.`);
+    } catch (error) {
+      window.alert(error?.message || "Unable to initiate call.");
+    } finally {
+      setCallLoading(false);
+    }
+  };
+
   if (!tenant) {
     return (
       <article className="flex h-full flex-col justify-between rounded-2xl sm:rounded-3xl border border-white/50 bg-white/75 p-4 sm:p-6 shadow-card backdrop-blur-xl">
@@ -129,6 +150,11 @@ const FlatCard = ({ flat, onAddTenant, onViewHistory }) => {
         <p className="text-xs uppercase tracking-[0.2em] sm:tracking-[0.3em] text-muted">Flat {flat.number}</p>
         <h3 className="mt-2 sm:mt-3 text-base sm:text-xl font-semibold">{tenant.name}</h3>
         <p className="mt-1 text-xs sm:text-sm text-muted">Rent: {formatCurrency(flat.paymentAmount)}</p>
+        {flat.paymentStatus === "Partially Paid" ? (
+          <p className="mt-1 text-xs sm:text-sm text-muted">
+            Paid: <span className="font-semibold">{formatCurrency(paidAmount)}</span> · Due: <span className="font-semibold">{formatCurrency(remainingAmount)}</span>
+          </p>
+        ) : null}
         {dueDate && (
           <p className="mt-1 text-xs sm:text-sm text-muted">Due: <span className="font-semibold">Every {dueDate}th</span></p>
         )}
@@ -138,10 +164,20 @@ const FlatCard = ({ flat, onAddTenant, onViewHistory }) => {
           }`}
         >
           <CheckCircle2 size={14} />
-          {flat.paymentStatus || "Pending"}
+          {flat.paymentStatus === "Partially Paid" ? t("partiallyPaid") : flat.paymentStatus || "Pending"}
         </div>
       </div>
       <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-3">
+        <button
+          type="button"
+          onClick={handleCallTenant}
+          disabled={loading || callLoading || !tenant?.phone || flat.paymentStatus === "Paid"}
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-blue-600 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <PhoneCall size={16} />
+          <span className="hidden sm:inline">{t("callTenant")}</span>
+          <span className="sm:hidden">Call</span>
+        </button>
         <button
           type="button"
           onClick={(event) => {
@@ -162,10 +198,18 @@ const FlatCard = ({ flat, onAddTenant, onViewHistory }) => {
           onClick={handleTogglePaymentClick}
           disabled={loading || !flat.paymentId}
           className={`rounded-full px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold ${
-            flat.paymentStatus === "Paid" ? "bg-paid/10 text-paid" : "bg-pending/10 text-pending"
+            flat.paymentStatus === "Paid"
+              ? "bg-paid/10 text-paid"
+              : flat.paymentStatus === "Partially Paid"
+                ? "bg-amber-500/10 text-amber-700"
+                : "bg-pending/10 text-pending"
           }`}
         >
-          {flat.paymentStatus === "Paid" ? t("rentPaid") : t("pending")}
+          {flat.paymentStatus === "Paid"
+            ? t("rentPaid")
+            : flat.paymentStatus === "Partially Paid"
+              ? t("partiallyPaid")
+              : t("pending")}
         </button>
         <button
           type="button"

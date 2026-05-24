@@ -19,6 +19,7 @@ A full-stack rent management application for tracking 11 flats, tenants, payment
 
 ### Additional Features
 - **WhatsApp Integration** - "Inform" button to send rent reminders via WhatsApp
+- **Manual Voice Call Agent** - "Call Tenant" button triggers an automated Vapi voice reminder call
 - **Multi-language Support** - English/Telugu translation toggle for key UI labels
 - **PWA Ready** - Progressive Web App with offline support via Service Worker
 - **Authentication** - Basic login protection (hardcoded credentials for demo)
@@ -127,6 +128,7 @@ See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for complete step-by-step deployment in
 | POST | `/api/vacate/:tenantId` | Vacate tenant and archive to history |
 | PATCH | `/api/payments/:id` | Toggle payment status (Paid/Pending) |
 | PATCH | `/api/payments/:id/date` | Update paid date for a payment |
+| POST | `/api/tenants/:tenantId/call-reminder` | Trigger automated Vapi voice reminder call for pending rent |
 | GET | `/api/rent-history?month=YYYY-MM` | Get rent records for a specific month |
 | GET | `/api/history` | Get all past tenants |
 | GET | `/api/tenants/:tenantId/history` | Get payment/deposit history for a tenant |
@@ -168,6 +170,9 @@ For production, implement proper authentication (JWT, OAuth, etc.).
 MONGODB_URI=<your-mongodb-atlas-connection-string>
 PORT=5000
 NODE_ENV=production
+VAPI_API_KEY=<your-vapi-api-key>
+VAPI_ASSISTANT_ID=<your-vapi-assistant-id>
+VAPI_PHONE_NUMBER_ID=<your-vapi-phone-number-id>
 ```
 
 ### Frontend
@@ -194,6 +199,10 @@ PORT=5001 npm start
 - Ensure phone number is in valid format
 - Check browser popup settings allow new tabs
 
+- **Manual call button returns configuration error:**
+- Ensure VAPI_API_KEY, VAPI_ASSISTANT_ID, and VAPI_PHONE_NUMBER_ID are set in backend environment
+- Restart backend after adding environment variables
+
 ## 📄 License
 
 This project is open source and available under the MIT License.
@@ -201,4 +210,58 @@ This project is open source and available under the MIT License.
 ---
 
 **Need help?** Check [DEPLOYMENT.md](./DEPLOYMENT.md) for deployment troubleshooting.
+
+## Vapi Assistant: Ready-made Prompt
+
+A ready-to-use rent reminder assistant prompt is included at `backend/vapi-assistant/assistant_prompt.txt`.
+
+Quick steps to start using the assistant:
+
+1. Create an assistant in your Vapi.ai dashboard and copy its `assistantId`.
+2. Import or configure a phone number in Vapi and get its `phoneNumberId`.
+3. Copy the content of `backend/vapi-assistant/assistant_prompt.txt` into your Vapi assistant's script (or pass variables when creating a call).
+4. Add the following environment variables to your backend `.env` file and restart the server:
+
+```env
+VAPI_API_KEY=<your-vapi-api-key>
+VAPI_ASSISTANT_ID=<your-vapi-assistant-id>
+VAPI_PHONE_NUMBER_ID=<your-vapi-phone-number-id>
+```
+
+5. Test a manual call using the API (replace `:tenantId` with a valid tenant id):
+
+```bash
+curl -X POST http://localhost:5000/api/tenants/:tenantId/call-reminder \
+	-H "Content-Type: application/json" \
+	-d '{}'
+```
+
+The endpoint will return the provider call id or an error message. If you want, I can also add a call-logs collection and a webhook endpoint to persist call events.
+
+### Webhook setup (recommended)
+
+1. (Optional but recommended) Set a secret for inbound webhooks in your backend `.env`:
+
+```env
+VAPI_WEBHOOK_SECRET=<a-random-secret-string>
+```
+
+2. In the Vapi dashboard, configure your webhook URL for call events to point to:
+
+```
+https://your-server.example.com/api/webhook/vapi
+```
+
+3. Configure Vapi to include the header `x-vapi-webhook-secret` with the value of `VAPI_WEBHOOK_SECRET` (if your Vapi dashboard supports custom headers) or otherwise include the secret in the webhook payload under `variables.CALL_ATTEMPT_ID`.
+
+4. Test the webhook locally (use ngrok or similar) with a sample payload:
+
+```bash
+curl -X POST http://localhost:5000/api/webhook/vapi \
+	-H "Content-Type: application/json" \
+	-H "x-vapi-webhook-secret: <your-secret>" \
+	-d '{"id":"test-call-1","status":"completed","customer":{"number":"+919876543210"}}'
+```
+
+The backend will record incoming webhook events under the `CallAttempt` records (see `backend/src/models/CallAttempt.js`).
 
