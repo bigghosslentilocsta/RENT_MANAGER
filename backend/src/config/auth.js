@@ -4,8 +4,8 @@ const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const issuedTokens = new Map();
 
 const safeCompare = (left, right) => {
-  const leftBuffer = Buffer.from(String(left || ""));
-  const rightBuffer = Buffer.from(String(right || ""));
+  const leftBuffer = Buffer.from(String(left || "").trim());
+  const rightBuffer = Buffer.from(String(right || "").trim());
 
   if (leftBuffer.length !== rightBuffer.length) {
     return false;
